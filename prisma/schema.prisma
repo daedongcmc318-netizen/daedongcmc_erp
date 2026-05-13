@@ -1,0 +1,372 @@
+// 대동CMC 통합 ERP — Prisma schema
+// SQLite for local dev. Production = PostgreSQL (Supabase) — change provider when migrating.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  // 로컬 개발은 sqlite 권장(빠름), 운영은 postgresql.
+  // DATABASE_URL 환경변수로 둘 다 지원하려면 provider도 env 가능한 라인을 분기해야 하는데,
+  // Prisma는 provider를 env에서 못 받으므로 운영 기준으로 postgresql 고정.
+  // 로컬에서 sqlite로 돌리려면 provider를 sqlite로 변경하고 DATABASE_URL="file:./dev.db" 사용.
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────────────── 직원 ─────────────────────────────────
+model User {
+  id                 String   @id @default(cuid())
+  empNo              String   @unique
+  name               String
+  residentNo         String?  // 주민등록번호 (full or masked)
+  email              String?
+  phone              String?
+  mobile             String?
+  dept               String
+  position           String
+  positionTitle      String?  // 직책
+  role               String   // admin / manager / staff
+  pmCode             String?  @unique
+  joinDate           DateTime?
+  joinType           String?  // 입사구분 (정규직/계약직/인턴 등)
+  leaveDate          DateTime?
+  leaveReason        String?
+  status             String   @default("active") // active / inactive / leave
+  // 급여통장
+  bankName           String?
+  accountNo          String?
+  accountHolder      String?
+  // 주소
+  postCode           String?
+  address            String?
+  // 기타
+  passportNo         String?
+  foreignName1       String?
+  foreignName2       String?
+  householderType    String?  // head / member / spouse
+  annualLeaveTotal   Float    @default(0)
+  annualLeaveUsed    Float    @default(0)
+  passwordHash       String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  managedProjects    Project[] @relation("ProjectManager")
+  expenseRequests    ExpenseRequest[] @relation("ExpenseRequester")
+  approvedExpenses   ExpenseRequest[] @relation("ExpenseApprover")
+  attendance         Attendance[]
+  leaveRequests      LeaveRequest[] @relation("LeaveRequester")
+  approvedLeaves     LeaveRequest[] @relation("LeaveApprover")
+}
+
+// ─────────────────────────────── 업체/거래처 ───────────────────────────────
+model Company {
+  id             String    @id @default(cuid())
+  name           String
+  bizNo          String?   @unique
+  repName        String?
+  address        String?
+  region         String?
+  type           String    @default("client") // client / agency / partner / etc
+  website        String?
+  industry       String?
+  corpType       String?
+  foundedAt      DateTime?
+  rating         String?   // P / A / B 등급
+  internalPmCode String?   // 대동CMC 내부 담당 PM (JHC, JYP 등)
+  items          String?   // 주요 아이템/제품
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  contacts          CompanyContact[]
+  clientProjects    Project[] @relation("ProjectClient")
+  agencyProjects    Project[] @relation("ProjectAgency")
+  taxInvoices       TaxInvoice[]
+}
+
+model CompanyContact {
+  id        String  @id @default(cuid())
+  companyId String
+  name      String
+  position  String?
+  phone     String?
+  email     String?
+  isPrimary Boolean @default(true)
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────────────────── 프로젝트 ───────────────────────────────
+model Project {
+  id                 String   @id @default(cuid())
+  projectCode        String   @unique
+  displayCode        String?  // 노션 '구분' 칼럼 (a01, b02 등) — 화면 표시용
+  year               Int
+  title              String
+  content            String?  // 발굴 시트의 '내용' 칼럼
+  selfFunding        Float?   // 발굴 시트의 '자부담' (단위 백만원, 노션 표기 그대로)
+  sortOrder          Int      @default(0)
+  companyId          String?
+  agencyId           String?
+  bizCategory        String   // innovation / export / contract / certification / rental
+  serviceType        String?
+  serviceDetail      String?
+  status             String   @default("request_received")
+  pmCode             String?
+  managerId          String?
+  confirmedRevenue   BigInt   @default(0)
+  expectedRevenue    BigInt   @default(0) // 발굴 시트의 예상매출 (단위 백만원이 아닌 원 기준으로 저장)
+  source             String   @default("nurture") // discovery(발굴) / nurture(육성)
+  confirmedYn        Boolean  @default(false)     // 발굴 시트의 확정 칼럼
+  nurtureType        String?  // new / nurture
+  region             String?
+  startDate          DateTime?
+  endDate            DateTime?
+  isAdvance          Boolean  @default(false)
+  isBalance          Boolean  @default(false)
+  parentProjectCode  String?
+  requestStatus      String?  // received / submitted / na
+  agreementYn        Boolean  @default(false)
+  advancePaidYn      Boolean  @default(false)
+  midReportDate      DateTime?
+  midReportYn        Boolean  @default(false)
+  finalReportDate    DateTime?
+  finalReportYn      Boolean  @default(false)
+  revisionYn         Boolean  @default(false)
+  keyword            String?
+  notes              String?
+  remarks            String?  // 구글시트의 '특이사항'
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  company       Company? @relation("ProjectClient", fields: [companyId], references: [id])
+  agency        Company? @relation("ProjectAgency", fields: [agencyId], references: [id])
+  manager       User?    @relation("ProjectManager", fields: [managerId], references: [id])
+  deliverables  ProjectDeliverable[]
+  taxInvoices   TaxInvoice[]
+  expenses      ExpenseRequest[]
+
+  @@index([status])
+  @@index([bizCategory])
+  @@index([pmCode])
+  @@index([year])
+}
+
+model ProjectDeliverable {
+  id            String   @id @default(cuid())
+  projectId     String
+  seq           Int
+  title         String
+  type          String?  // report / product / design / website / document / other
+  isCompleted   Boolean  @default(false)
+  dueDate       DateTime?
+  completedDate DateTime?
+  fileUrl       String?
+  notes         String?
+
+  project       Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+// 카드 매입 (법인카드 매입내역) — 엑셀 업로드용
+model CardPurchase {
+  id            String    @id @default(cuid())
+  approvalNo    String?   @unique  // 승인번호 (있으면)
+  approvalDate  DateTime  // 승인일자
+  cardNo        String?   // 카드번호 (마스킹된)
+  cardName      String?   // 카드명
+  merchantName  String    // 가맹점명
+  merchantBizNo String?
+  category      String?   // 업종
+  amount        BigInt    @default(0) // 청구금액(총액)
+  supplyAmount  BigInt    @default(0)
+  taxAmount     BigInt    @default(0)
+  installment   String?   // 할부
+  note          String?
+  sourceFile    String?
+  createdAt     DateTime  @default(now())
+
+  @@index([approvalDate])
+  @@index([merchantName])
+}
+
+// 전자근로계약서
+model LaborContract {
+  id              String   @id @default(cuid())
+  title           String   // 계약서명
+  category        String?  // 구분명 (표준근로계약서, 비밀유지서약서 등)
+  dept            String?
+  projectId       String?
+  fileUrl         String?  // 첨부 PDF 경로
+  fileName        String?
+  message         String?  // 전달메시지
+  use2FA          Boolean  @default(false) // 2차인증사용 여부
+
+  // 수신자 정보 (인사관리에서 매칭)
+  recipientUserId String?
+  recipientName   String?
+  recipientEmail  String?
+  recipientPhone  String?
+  deliveryMethod  String?  // email / sms / kakao / direct
+
+  // 진행 단계
+  stage           String   @default("draft")
+  // draft(계약서 작성) → requested(요청완료) → signed(서명완료) → cancelled(취소) → rejected(반려)
+  requestedAt     DateTime?
+  signedAt        DateTime?
+  signatureUrl    String?  // 서명 데이터 (base64 이미지)
+
+  createdById     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([stage])
+  @@index([recipientUserId])
+}
+
+// 홈택스에서 다운로드한 전자세금계산서 목록 (엑셀 업로드용, 프로젝트와 별도)
+model ElectronicTaxInvoice {
+  id               String   @id @default(cuid())
+  type             String   // sales / purchase
+  approvalNo       String   @unique  // 승인번호
+  writeDate        DateTime  // 작성일자
+  issueDate        DateTime? // 발급일자
+  sendDate         DateTime? // 전송일자
+
+  // 공급자
+  supplierBizNo    String
+  supplierSubNo    String?  // 종사업장번호
+  supplierName     String
+  supplierRep      String?
+  supplierAddr     String?
+  supplierEmail    String?
+
+  // 공급받는자
+  buyerBizNo       String
+  buyerSubNo       String?
+  buyerName        String
+  buyerRep         String?
+  buyerAddr        String?
+  buyerEmail       String?
+  buyerEmail2      String?
+
+  // 금액
+  totalAmount      BigInt   @default(0)
+  supplyAmount     BigInt   @default(0)
+  taxAmount        BigInt   @default(0)
+
+  // 메타
+  category         String?  // 전자세금계산서분류 (세금계산서/계산서 등)
+  invoiceKind      String?  // 전자세금계산서종류 (일반/영세율 등)
+  issueType        String?  // 발급유형
+  note             String?
+  paymentType      String?  // 영수/청구
+
+  // 대표 품목
+  itemDate         DateTime?
+  itemName         String?
+  itemSpec         String?
+  itemQty          String?
+  itemUnitPrice    String?
+  itemNote         String?
+
+  sourceFile       String?  // 원본 파일명 (감사용)
+  createdAt        DateTime @default(now())
+
+  @@index([type])
+  @@index([writeDate])
+  @@index([type, writeDate])
+  @@index([supplierBizNo])
+  @@index([buyerBizNo])
+}
+
+model TaxInvoice {
+  id              String   @id @default(cuid())
+  projectId       String
+  companyId       String?
+  invoiceNo       String?
+  amount          BigInt
+  issueDate       DateTime?
+  issuedYn        Boolean  @default(false)
+  vatReceivedYn   Boolean  @default(false)
+  settlementDoneYn Boolean @default(false)
+  paymentDoneYn   Boolean  @default(false)
+  paymentDate     DateTime?
+  description     String?
+  createdAt       DateTime @default(now())
+
+  project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  company Company? @relation(fields: [companyId], references: [id])
+
+  @@index([issueDate])
+  @@index([issuedYn, issueDate])
+}
+
+// ─────────────────────────────── 지출결의 ───────────────────────────────
+model ExpenseRequest {
+  id              String   @id @default(cuid())
+  expenseNo       String   @unique
+  title           String
+  projectId       String?
+  companyId       String?
+  taxInvoiceId    String?  // 매칭된 전자세금계산서
+  category        String
+  amount          BigInt
+  description     String?
+  requesterId     String
+  requestDate     DateTime
+  status          String   @default("pending") // pending / approved / rejected / cancelled
+  approverId      String?
+  approvedDate    DateTime?
+  rejectReason    String?
+  receiptUrl      String?
+  paymentMethod   String?  // card / cash / transfer
+  attachmentNote  String?  // 첨부설명/메모
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  project   Project? @relation(fields: [projectId], references: [id])
+  requester User     @relation("ExpenseRequester", fields: [requesterId], references: [id])
+  approver  User?    @relation("ExpenseApprover", fields: [approverId], references: [id])
+
+  @@index([status])
+  @@index([requesterId])
+  @@index([projectId])
+}
+
+// ─────────────────────────────── 근태 ───────────────────────────────
+model Attendance {
+  id              String   @id @default(cuid())
+  userId          String
+  date            DateTime
+  checkIn         DateTime?
+  checkOut        DateTime?
+  status          String   // working / off / leave / half_am / half_pm / absent / holiday
+  checkInLocation String?
+  notes           String?
+  createdAt       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+}
+
+model LeaveRequest {
+  id           String    @id @default(cuid())
+  userId       String
+  type         String    // annual / half_am / half_pm / sick / special
+  startDate    DateTime
+  endDate      DateTime
+  days         Float
+  reason       String?
+  status       String    @default("pending")
+  approverId   String?
+  approvedDate DateTime?
+  createdAt    DateTime  @default(now())
+
+  user     User  @relation("LeaveRequester", fields: [userId], references: [id], onDelete: Cascade)
+  approver User? @relation("LeaveApprover", fields: [approverId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+}

@@ -1,0 +1,45 @@
+{
+  "name": "daedong-erp",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "prisma generate && next build",
+    "start": "next start -p 3001",
+    "lint": "next lint",
+    "postinstall": "prisma generate",
+    "db:push": "prisma db push",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:seed-users": "tsx prisma/seed-users.ts",
+    "db:seed-passwords": "tsx prisma/seed-passwords.ts",
+    "db:seed-companies": "tsx prisma/seed-companies.ts",
+    "db:seed-invoices": "tsx prisma/seed-invoices.ts",
+    "db:seed-deliverables": "tsx prisma/seed-deliverables.ts",
+    "db:seed-all": "npm run db:seed && npm run db:seed-users && npm run db:seed-passwords && npm run db:seed-companies && npm run db:seed-invoices && npm run db:seed-deliverables",
+    "db:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "@tanstack/react-table": "^8.20.5",
+    "@types/bcryptjs": "^2.4.6",
+    "bcryptjs": "^3.0.3",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "lucide-react": "^0.460.0",
+    "next": "14.2.18",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "prisma": "^5.22.0",
+    "tailwindcss": "^3.4.15",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "xlsx": "^0.18.5"
+  }
+}
