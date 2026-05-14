@@ -72,7 +72,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const updated = await prisma.project.update({
     where: { id: params.id },
     data,
-    include: { company: true, agency: true, manager: true, taxInvoices: true },
+    include: {
+      company: { include: { contacts: { take: 1, orderBy: { isPrimary: "desc" } } } },
+      agency: true,
+      manager: true,
+      taxInvoices: { orderBy: { createdAt: "asc" } },
+      deliverables: { orderBy: { seq: "asc" } },
+    },
   });
   revalidatePath("/");
   revalidatePath("/projects");

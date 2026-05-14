@@ -113,7 +113,13 @@ export async function POST(req: NextRequest) {
 
   const project = await prisma.project.create({
     data,
-    include: { company: true, agency: true, manager: true, taxInvoices: true },
+    include: {
+      company: { include: { contacts: { take: 1, orderBy: { isPrimary: "desc" } } } },
+      agency: true,
+      manager: true,
+      taxInvoices: { orderBy: { createdAt: "asc" } },
+      deliverables: { orderBy: { seq: "asc" } },
+    },
   });
 
   revalidatePath("/");

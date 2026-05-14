@@ -311,15 +311,39 @@ export default function ProjectsClient({
   const cols = tab === "nurture" ? NURTURE_COLS : DISCOVERY_COLS;
 
   async function patchProject(id: string, patch: Record<string, any>) {
-    const res = await fetch(`/api/projects/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch),
-    });
-    if (!res.ok) return;
-    const updated = await res.json();
-    setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, ...updated } : p)));
-    router.refresh();
+    try {
+      const res = await fetch(`/api/projects/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        let err: any = {};
+        try { err = JSON.parse(text); } catch {}
+        alert(`수정 실패 (${res.status}): ${err.error ?? err.detail ?? text.slice(0, 200) ?? "알 수 없는 오류"}`);
+        return;
+      }
+      const updated = await res.json();
+      setProjects((prev) =>
+        prev.map((p) => {
+          if (p.id !== id) return p;
+          // 안전한 머지: 응답에 없는 nested는 기존 값 유지
+          return {
+            ...p,
+            ...updated,
+            company: updated.company ?? p.company,
+            agency: updated.agency ?? p.agency,
+            manager: updated.manager ?? p.manager,
+            taxInvoices: updated.taxInvoices ?? p.taxInvoices,
+            deliverables: updated.deliverables ?? p.deliverables,
+          };
+        })
+      );
+      router.refresh();
+    } catch (e: any) {
+      alert(`네트워크 오류: ${e.message}`);
+    }
   }
 
   async function patchInvoice(invoiceId: string, projectId: string, patch: Record<string, any>) {

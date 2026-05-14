@@ -5,26 +5,46 @@ import { serializeProject } from "@/lib/serialize";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const PAGE_SIZE = 200;
+const PAGE_SIZE_DEFAULT = 200;
+const PAGE_SIZE_SEARCHING = 3000; // 검색어 있으면 전체에 가까운 결과
 
 export default async function InvoicesPage({
   searchParams,
 }: {
-  searchParams: { type?: string; year?: string };
+  searchParams: { type?: string; year?: string; q?: string };
 }) {
   const type = searchParams.type ?? "sales";
   const year = searchParams.year ?? "";
+  const q = (searchParams.q ?? "").trim();
+
   const where: any = { type };
-  if (year) {
+  // 검색어가 있으면 year 필터 무시(전체 연도) — 거래처 전체 거래이력 조회
+  if (year && !q) {
     const start = new Date(`${year}-01-01`);
     const end = new Date(`${Number(year) + 1}-01-01`);
     where.writeDate = { gte: start, lt: end };
+  }
+  if (q) {
+    const qDigits = q.replace(/[^\d]/g, "");
+    where.OR = [
+      { supplierName: { contains: q, mode: "insensitive" as const } },
+      { buyerName: { contains: q, mode: "insensitive" as const } },
+      { itemName: { contains: q, mode: "insensitive" as const } },
+      { approvalNo: { contains: q } },
+      { note: { contains: q } },
+      ...(qDigits.length >= 3
+        ? [
+            { supplierBizNo: { contains: qDigits } },
+            { buyerBizNo: { contains: qDigits } },
+          ]
+        : []),
+    ];
   }
   const [items, agg, allDates] = await Promise.all([
     prisma.electronicTaxInvoice.findMany({
       where,
       orderBy: { writeDate: "desc" },
-      take: PAGE_SIZE,
+      take: q ? PAGE_SIZE_SEARCHING : PAGE_SIZE_DEFAULT,
     }),
     prisma.electronicTaxInvoice.aggregate({
       where,
@@ -72,6 +92,7 @@ export default async function InvoicesPage({
       currentType={type as "sales" | "purchase"}
       currentYear={year}
       years={allYears}
+      currentQ={q}
     />
   );
 }

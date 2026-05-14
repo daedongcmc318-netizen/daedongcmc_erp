@@ -52,6 +52,7 @@ export default function InvoicesClient({
   currentType,
   currentYear,
   years,
+  currentQ,
 }: {
   initialItems: Invoice[];
   initialSummary: Summary;
@@ -59,6 +60,7 @@ export default function InvoicesClient({
   currentType: "sales" | "purchase";
   currentYear: string;
   years: number[];
+  currentQ: string;
 }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -72,19 +74,38 @@ export default function InvoicesClient({
   useEffect(() => {
     setSummary(initialSummary);
   }, [initialSummary]);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(currentQ);
   const [searchField, setSearchField] = useState<"all" | "partner" | "item" | "amount">("all");
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState<string | null>(null);
+
+  // 검색어 디바운싱 — 입력 후 600ms 멈추면 서버 검색 트리거 (전체 연도)
+  useEffect(() => {
+    if (search === currentQ) return;
+    const t = setTimeout(() => {
+      const params = new URLSearchParams();
+      params.set("type", currentType);
+      if (search.trim()) {
+        params.set("q", search.trim());
+      } else if (currentYear) {
+        params.set("year", currentYear);
+      }
+      router.push(`/invoices?${params.toString()}`);
+    }, 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
   const salesAgg = totalsByType.find((t) => t.type === "sales");
   const purchaseAgg = totalsByType.find((t) => t.type === "purchase");
 
   function navigate(type: string, year: string) {
-    const q = new URLSearchParams();
-    q.set("type", type);
-    if (year) q.set("year", year);
-    router.push(`/invoices?${q.toString()}`);
+    const params = new URLSearchParams();
+    params.set("type", type);
+    if (year) params.set("year", year);
+    // 검색 중이면 검색어 유지
+    if (currentQ) params.set("q", currentQ);
+    router.push(`/invoices?${params.toString()}`);
   }
 
   // 클라이언트측 추가 검색 (이미 서버에서 type/year로 필터됨)
@@ -253,8 +274,26 @@ export default function InvoicesClient({
         </div>
       )}
 
+      {/* 검색 모드 안내 */}
+      {currentQ && (
+        <div className="mb-3 flex items-center justify-between bg-amber-50 border border-amber-200 text-amber-800 text-xs px-3 py-2 rounded-lg">
+          <span>
+            🔍 <strong>「{currentQ}」</strong> 검색 결과 (전체 연도, 매출/매입 통합) — 연도 필터 일시 무시
+          </span>
+          <button
+            onClick={() => {
+              setSearch("");
+              router.push(`/invoices?type=${currentType}`);
+            }}
+            className="text-amber-800 hover:text-amber-950 underline text-[11px]"
+          >
+            검색 종료
+          </button>
+        </div>
+      )}
+
       {/* 연도 버튼 */}
-      <div className="mb-4 flex items-center gap-1.5 flex-wrap">
+      <div className={clsx("mb-4 flex items-center gap-1.5 flex-wrap", currentQ && "opacity-40 pointer-events-none")}>
         <YearBtn active={!currentYear} onClick={() => navigate(currentType, "")}>
           전체
         </YearBtn>
