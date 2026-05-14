@@ -108,14 +108,21 @@ async function getDashboardData() {
       },
       select: { amount: true, issueDate: true, paymentDoneYn: true },
     }),
+    // 담당자별 상태별 카운트 (진행중 vs 완료)
     prisma.project.groupBy({
-      by: ["managerId", "bizCategory"],
+      by: ["managerId", "status"],
       where: { year, managerId: { not: null } },
       _count: true,
     }),
-    // 월별 마감현황: 육성 프로젝트 전체 (완료보고일자 기준, 일자 없는 건은 별도 버킷)
+    // 월별 마감현황: 육성 프로젝트 중 완료보고 미완료 + 의미있는 서비스 타입만
+    //   제외: 인증(certification), 임대(rental), 비용정산(cost_settlement), 서비스없음(null)
     prisma.project.findMany({
-      where: { year, source: "nurture" },
+      where: {
+        year,
+        source: "nurture",
+        finalReportYn: false,
+        serviceType: { notIn: ["certification", "rental", "cost_settlement"], not: null },
+      },
       select: { finalReportDate: true, serviceType: true, finalReportYn: true, title: true, displayCode: true },
     }),
     // 이번달 마감 예정 = 종료일자가 이번달에 속한 건 (이미 지난 일자 포함, 완료보고 미완료만)
@@ -161,14 +168,21 @@ async function getDashboardData() {
   });
   const managerMap = new Map(managers.map((m) => [m.id, m]));
 
-  const managerSummary = new Map<string, { total: number; byBiz: Map<string, number>; manager: typeof managers[0] }>();
+  // 진행중 = 정산/입금 이전 단계 / 완료 = 정산완료 + 입금완료
+  const DONE_STATUSES = new Set(["settlement_done", "payment_done"]);
+  const managerSummary = new Map<
+    string,
+    { total: number; inProgress: number; done: number; manager: typeof managers[0] }
+  >();
   for (const g of managerGroups) {
     const m = managerMap.get(g.managerId!);
     if (!m) continue;
-    if (!managerSummary.has(m.id)) managerSummary.set(m.id, { total: 0, byBiz: new Map(), manager: m });
+    if (!managerSummary.has(m.id))
+      managerSummary.set(m.id, { total: 0, inProgress: 0, done: 0, manager: m });
     const s = managerSummary.get(m.id)!;
     s.total += g._count;
-    s.byBiz.set(g.bizCategory, (s.byBiz.get(g.bizCategory) ?? 0) + g._count);
+    if (DONE_STATUSES.has(g.status)) s.done += g._count;
+    else s.inProgress += g._count;
   }
 
   // 매출 집계
@@ -772,7 +786,12 @@ function Pipeline({
 function ManagerList({
   items,
 }: {
-  items: { total: number; byBiz: Map<string, number>; manager: { id: string; name: string; pmCode: string | null; position: string; dept: string } }[];
+  items: {
+    total: number;
+    inProgress: number;
+    done: number;
+    manager: { id: string; name: string; pmCode: string | null; position: string; dept: string };
+  }[];
 }) {
   if (items.length === 0) {
     return <div className="text-xs text-slate-400 py-8 text-center">담당자가 지정된 프로젝트가 없습니다</div>;
@@ -784,7 +803,8 @@ function ManagerList({
       {items.map((g) => {
         const m = g.manager;
         const pct = max ? (g.total / max) * 100 : 0;
-        const bizParts = Array.from(g.byBiz.entries()).sort((a, b) => b[1] - a[1]);
+        const inProgressW = g.total > 0 ? (g.inProgress / g.total) * 100 : 0;
+        const doneW = g.total > 0 ? (g.done / g.total) * 100 : 0;
         return (
           <li key={m.id} className="flex items-center gap-3 p-2 -mx-2 rounded-lg hover:bg-slate-50">
             <div className="w-9 h-9 rounded-full bg-gradient-to-br from-brand-400 to-brand-600 text-white text-xs font-semibold flex items-center justify-center shrink-0">
@@ -797,22 +817,23 @@ function ManagerList({
                   <span className="text-[10px] text-slate-400 shrink-0">{m.position}</span>
                 </div>
                 <span className="text-sm font-semibold tabular-nums text-slate-800 shrink-0">
-                  {g.total}<span className="text-[10px] text-slate-400 ml-0.5">건</span>
+                  {g.total}
+                  <span className="text-[10px] text-slate-400 ml-0.5">건</span>
                 </span>
               </div>
               <div className="flex h-1.5 rounded-full overflow-hidden bg-slate-100" style={{ width: `${pct}%`, minWidth: "20px" }}>
-                {bizParts.map(([biz, count]) => {
-                  const w = (count / g.total) * 100;
-                  return <div key={biz} style={{ width: `${w}%`, background: BIZ_HEX[biz] ?? "#94a3b8" }} />;
-                })}
+                <div className="bg-brand-500" style={{ width: `${inProgressW}%` }} />
+                <div className="bg-emerald-500" style={{ width: `${doneW}%` }} />
               </div>
-              <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-slate-500">
-                {bizParts.map(([biz, count]) => (
-                  <span key={biz} className="inline-flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-sm" style={{ background: BIZ_HEX[biz] ?? "#94a3b8" }} />
-                    {getBizMeta(biz).label} {count}
-                  </span>
-                ))}
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-slate-600">
+                <span className="inline-flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-sm bg-brand-500" />
+                  진행중 <strong className="text-brand-700 tabular-nums">{g.inProgress}</strong>
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-sm bg-emerald-500" />
+                  완료 <strong className="text-emerald-700 tabular-nums">{g.done}</strong>
+                </span>
               </div>
             </div>
           </li>

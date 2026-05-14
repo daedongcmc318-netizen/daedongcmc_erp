@@ -57,22 +57,53 @@ const STATUS_META: Record<string, { label: string; color: string }> = {
   cancelled: { label: "취소", color: "bg-slate-100 text-slate-500" },
 };
 
+type TripRow = {
+  id: string;
+  title: string;
+  destination: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  totalCost: string;
+  status: string;
+  approvalRoute: string;
+  createdAt: string;
+  user: { id: string; name: string; position: string };
+};
+type LeaveRow = {
+  id: string;
+  type: string;
+  startDate: string;
+  endDate: string;
+  days: number;
+  status: string;
+  approvalRoute: string;
+  currentLevel: number;
+  createdAt: string;
+  user: { id: string; name: string; position: string };
+  approvals: { level: number; status: string; approver: { name: string; position: string } }[];
+};
+
 export default function ExpensesClient({
   initialExpenses,
   users,
   projects,
   me,
+  tripReports = [],
+  leaveRequests = [],
 }: {
   initialExpenses: Expense[];
   users: User[];
   projects: Project[];
   me: { id: string; name: string; role: string } | null;
+  tripReports?: TripRow[];
+  leaveRequests?: LeaveRow[];
 }) {
   const router = useRouter();
   const [items, setItems] = useState<Expense[]>(initialExpenses);
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
+  const [typeTab, setTypeTab] = useState<"all" | "expense" | "trip" | "leave">("all");
   const [editing, setEditing] = useState<Expense | null>(null);
 
   const counts = useMemo(() => {
@@ -108,21 +139,40 @@ export default function ExpensesClient({
     <div className="px-6 py-6">
       <div className="flex items-end justify-between mb-4">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">지출결의</h1>
+          <h1 className="text-xl font-semibold tracking-tight">전자결재함</h1>
           <p className="text-xs text-slate-500 mt-1">
-            프로젝트·세금계산서와 매칭하여 비용 결재. 결재자 지정 후 승인/반려 처리
+            지출결의서 · 출장신청서 · 휴가신청서 통합 현황
           </p>
         </div>
         <button
           onClick={() => setCreating(true)}
           className="h-9 px-3 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-md flex items-center gap-1.5 shadow-sm"
         >
-          <Plus className="w-4 h-4" /> 신규 기안
+          <Plus className="w-4 h-4" /> 신규 지출결의
         </button>
       </div>
 
-      {/* 상태 탭 */}
-      <div className="flex items-center gap-1 mb-3 border-b border-slate-200">
+      {/* 결재 유형 탭 */}
+      <div className="flex items-center gap-1 mb-2 border-b border-slate-200">
+        <TypeTab active={typeTab === "all"} onClick={() => setTypeTab("all")} count={items.length + tripReports.length + leaveRequests.length}>
+          전체
+        </TypeTab>
+        <TypeTab active={typeTab === "expense"} onClick={() => setTypeTab("expense")} count={items.length}>
+          지출결의서
+        </TypeTab>
+        <TypeTab active={typeTab === "trip"} onClick={() => setTypeTab("trip")} count={tripReports.length}>
+          출장신청서
+        </TypeTab>
+        <TypeTab active={typeTab === "leave"} onClick={() => setTypeTab("leave")} count={leaveRequests.length}>
+          휴가신청서
+        </TypeTab>
+        <span className="ml-auto text-[10px] text-slate-400 pr-2">
+          출장/휴가 신규 작성은 사이드바 메뉴에서
+        </span>
+      </div>
+
+      {/* 상태 탭 (지출결의서일 때만) */}
+      {typeTab === "expense" && <div className="flex items-center gap-1 mb-3 border-b border-slate-200">
         <StatusTab active={statusFilter === ""} onClick={() => setStatusFilter("")} count={counts.all}>
           전체
         </StatusTab>
@@ -136,9 +186,9 @@ export default function ExpensesClient({
             {m.label}
           </StatusTab>
         ))}
-      </div>
+      </div>}
 
-      {/* 검색 */}
+      {/* 검색 (지출결의서 + 전체) */}
       <div className="flex flex-wrap items-center gap-2 mb-3 bg-white border border-slate-200 rounded-lg px-3 py-2">
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
@@ -154,7 +204,24 @@ export default function ExpensesClient({
         </span>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+      {/* 전체 통합 뷰 (3종 합쳐서 보기) */}
+      {typeTab === "all" && (
+        <UnifiedApprovalList
+          expenses={filtered}
+          trips={tripReports}
+          leaves={leaveRequests}
+          onClickExpense={(e) => setEditing(e)}
+        />
+      )}
+
+      {/* 출장신청서 */}
+      {typeTab === "trip" && <TripList items={tripReports} />}
+
+      {/* 휴가신청서 */}
+      {typeTab === "leave" && <LeaveList items={leaveRequests} />}
+
+      {/* 지출결의서 전용 표 */}
+      {typeTab === "expense" && <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
         <table className="w-full text-xs">
           <thead className="bg-slate-50">
             <tr className="text-[11px] text-slate-500 font-medium border-b border-slate-200">
@@ -223,13 +290,13 @@ export default function ExpensesClient({
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={9} className="text-center py-12 text-slate-400 text-sm">
-                  표시할 기안이 없습니다. 「+ 신규 기안」으로 시작하세요.
+                  표시할 기안이 없습니다. 「+ 신규 지출결의」으로 시작하세요.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
-      </div>
+      </div>}
 
       {creating && (
         <ExpenseFormModal
@@ -793,6 +860,298 @@ function AttachmentInput({
           {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : "+ 파일 선택"}
         </label>
       )}
+    </div>
+  );
+}
+
+/* ─────────── 결재 유형 탭 ─────────── */
+function TypeTab({
+  active,
+  onClick,
+  count,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  count: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={clsx(
+        "px-3 py-2 text-sm font-medium border-b-2 -mb-px transition flex items-center gap-1.5",
+        active ? "border-brand-600 text-brand-700" : "border-transparent text-slate-500 hover:text-slate-800"
+      )}
+    >
+      {children}
+      <span
+        className={clsx(
+          "text-[10px] px-1.5 py-0.5 rounded-full tabular-nums font-medium",
+          active ? "bg-brand-100 text-brand-700" : "bg-slate-100 text-slate-500"
+        )}
+      >
+        {count}
+      </span>
+    </button>
+  );
+}
+
+const LEAVE_LABEL: Record<string, string> = {
+  annual: "연차",
+  monthly: "월차",
+  half_am: "오전반차",
+  half_pm: "오후반차",
+  public: "공가",
+  sick: "병가",
+  maternity: "출산휴가",
+  summer: "하계휴가",
+  family_event: "경조휴가",
+  disaster: "재해휴가",
+  health: "보건휴가",
+  other: "기타",
+};
+
+const TYPE_BADGE: Record<string, { label: string; color: string }> = {
+  expense: { label: "지출결의", color: "bg-blue-100 text-blue-800" },
+  trip: { label: "출장", color: "bg-violet-100 text-violet-800" },
+  leave: { label: "휴가", color: "bg-emerald-100 text-emerald-800" },
+};
+
+const APPROVAL_STATUS_COLOR: Record<string, string> = {
+  pending: "bg-amber-100 text-amber-800",
+  approved: "bg-emerald-100 text-emerald-800",
+  rejected: "bg-rose-100 text-rose-800",
+  cancelled: "bg-slate-100 text-slate-600",
+  draft: "bg-slate-100 text-slate-600",
+};
+
+function statusLabel(s: string): string {
+  const map: Record<string, string> = {
+    pending: "결재대기",
+    approved: "승인",
+    rejected: "반려",
+    cancelled: "취소",
+    draft: "임시저장",
+  };
+  return map[s] ?? s;
+}
+
+/* ─────────── 통합 결재 목록 ─────────── */
+function UnifiedApprovalList({
+  expenses,
+  trips,
+  leaves,
+  onClickExpense,
+}: {
+  expenses: Expense[];
+  trips: TripRow[];
+  leaves: LeaveRow[];
+  onClickExpense: (e: Expense) => void;
+}) {
+  // 모두 합쳐서 createdAt 내림차순
+  const rows: { kind: "expense" | "trip" | "leave"; date: string; row: any }[] = [
+    ...expenses.map((e) => ({ kind: "expense" as const, date: e.createdAt, row: e })),
+    ...trips.map((t) => ({ kind: "trip" as const, date: t.createdAt, row: t })),
+    ...leaves.map((l) => ({ kind: "leave" as const, date: l.createdAt, row: l })),
+  ].sort((a, b) => b.date.localeCompare(a.date));
+
+  if (rows.length === 0) {
+    return (
+      <div className="bg-white border border-slate-200 rounded-lg py-16 text-center text-sm text-slate-400">
+        결재 기안이 없습니다. 좌측 사이드바의 지출결의서 / 출장신청서 / 휴가신청서에서 작성하세요.
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+      <table className="w-full text-xs">
+        <thead className="bg-slate-50">
+          <tr className="text-[11px] text-slate-500 font-medium border-b border-slate-200">
+            <th className="text-left px-3 py-2.5 w-20">유형</th>
+            <th className="text-left px-3 py-2.5 w-24">신청일자</th>
+            <th className="text-left px-3 py-2.5">제목/내용</th>
+            <th className="text-left px-3 py-2.5 w-24">기안자</th>
+            <th className="text-right px-3 py-2.5 w-28">금액/일수</th>
+            <th className="text-left px-3 py-2.5 w-24">결재라인</th>
+            <th className="text-left px-3 py-2.5 w-24">상태</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(({ kind, row }) => {
+            const meta = TYPE_BADGE[kind];
+            if (kind === "expense") {
+              const it = row as Expense;
+              return (
+                <tr key={`e-${it.id}`} onClick={() => onClickExpense(it)} className="border-b border-slate-100 hover:bg-brand-50/40 cursor-pointer">
+                  <td className="px-3 py-2"><span className={clsx("text-[10px] px-1.5 py-0.5 rounded font-medium", meta.color)}>{meta.label}</span></td>
+                  <td className="px-3 py-2 font-mono text-[11px] text-slate-600 tabular-nums">{it.requestDate.slice(0, 10)}</td>
+                  <td className="px-3 py-2 font-medium text-slate-800 truncate">{it.title}</td>
+                  <td className="px-3 py-2 text-slate-700">{it.requester?.name ?? "—"}</td>
+                  <td className="px-3 py-2 text-right tabular-nums font-semibold text-slate-900">₩{Number(it.amount).toLocaleString()}</td>
+                  <td className="px-3 py-2 text-[10.5px] text-slate-500">{it.approvalRoute === "external" ? "외부" : "내부"}</td>
+                  <td className="px-3 py-2">
+                    <span className={clsx("text-[10.5px] px-2 py-0.5 rounded font-medium", APPROVAL_STATUS_COLOR[it.status] ?? "bg-slate-100")}>
+                      {statusLabel(it.status)}
+                    </span>
+                  </td>
+                </tr>
+              );
+            }
+            if (kind === "trip") {
+              const it = row as TripRow;
+              return (
+                <tr key={`t-${it.id}`} className="border-b border-slate-100 hover:bg-violet-50/30">
+                  <td className="px-3 py-2"><span className={clsx("text-[10px] px-1.5 py-0.5 rounded font-medium", meta.color)}>{meta.label}</span></td>
+                  <td className="px-3 py-2 font-mono text-[11px] text-slate-600 tabular-nums">{it.createdAt.slice(0, 10)}</td>
+                  <td className="px-3 py-2 truncate">
+                    <span className="font-medium text-slate-800">{it.title}</span>
+                    {it.destination && <span className="text-[10px] text-slate-500 ml-2">@{it.destination}</span>}
+                  </td>
+                  <td className="px-3 py-2 text-slate-700">{it.user?.name ?? "—"}</td>
+                  <td className="px-3 py-2 text-right tabular-nums font-semibold text-slate-900">₩{Number(it.totalCost).toLocaleString()}</td>
+                  <td className="px-3 py-2 text-[10.5px] text-slate-500">{it.approvalRoute === "external" ? "외부" : "내부"}</td>
+                  <td className="px-3 py-2">
+                    <span className={clsx("text-[10.5px] px-2 py-0.5 rounded font-medium", APPROVAL_STATUS_COLOR[it.status] ?? "bg-slate-100")}>
+                      {statusLabel(it.status)}
+                    </span>
+                  </td>
+                </tr>
+              );
+            }
+            // leave
+            const it = row as LeaveRow;
+            return (
+              <tr key={`l-${it.id}`} className="border-b border-slate-100 hover:bg-emerald-50/30">
+                <td className="px-3 py-2"><span className={clsx("text-[10px] px-1.5 py-0.5 rounded font-medium", meta.color)}>{meta.label}</span></td>
+                <td className="px-3 py-2 font-mono text-[11px] text-slate-600 tabular-nums">{it.createdAt.slice(0, 10)}</td>
+                <td className="px-3 py-2 truncate">
+                  <span className="font-medium text-slate-800">{LEAVE_LABEL[it.type] ?? it.type}</span>
+                  <span className="text-[10.5px] text-slate-500 ml-2">
+                    {it.startDate.slice(0, 10)}{it.endDate !== it.startDate && ` ~ ${it.endDate.slice(0, 10)}`}
+                  </span>
+                </td>
+                <td className="px-3 py-2 text-slate-700">{it.user?.name ?? "—"}</td>
+                <td className="px-3 py-2 text-right tabular-nums font-semibold text-slate-900">{it.days}일</td>
+                <td className="px-3 py-2 text-[10.5px] text-slate-500">{it.approvalRoute === "external" ? "외부" : "내부"}</td>
+                <td className="px-3 py-2">
+                  <span className={clsx("text-[10.5px] px-2 py-0.5 rounded font-medium", APPROVAL_STATUS_COLOR[it.status] ?? "bg-slate-100")}>
+                    {statusLabel(it.status)}
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/* ─────────── 출장신청서 목록 ─────────── */
+function TripList({ items }: { items: TripRow[] }) {
+  if (items.length === 0) {
+    return (
+      <div className="bg-white border border-slate-200 rounded-lg py-16 text-center text-sm text-slate-400">
+        출장신청서가 없습니다. 사이드바 ▸ 전자결재 ▸ 출장신청서에서 작성하세요.
+      </div>
+    );
+  }
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+      <table className="w-full text-xs">
+        <thead className="bg-slate-50">
+          <tr className="text-[11px] text-slate-500 font-medium border-b border-slate-200">
+            <th className="text-left px-3 py-2.5 w-24">신청일자</th>
+            <th className="text-left px-3 py-2.5">제목</th>
+            <th className="text-left px-3 py-2.5 w-28">출장지</th>
+            <th className="text-left px-3 py-2.5 w-44">출장기간</th>
+            <th className="text-left px-3 py-2.5 w-24">기안자</th>
+            <th className="text-right px-3 py-2.5 w-28">예상비용</th>
+            <th className="text-left px-3 py-2.5 w-24">상태</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((t) => (
+            <tr key={t.id} className="border-b border-slate-100 hover:bg-violet-50/30">
+              <td className="px-3 py-2 font-mono text-[11px] text-slate-600 tabular-nums">{t.createdAt.slice(0, 10)}</td>
+              <td className="px-3 py-2 font-medium text-slate-800">{t.title}</td>
+              <td className="px-3 py-2 text-slate-600">{t.destination ?? "—"}</td>
+              <td className="px-3 py-2 text-[11px] text-slate-600 tabular-nums">
+                {t.startDate?.slice(0, 10) ?? "—"}
+                {t.endDate && t.endDate !== t.startDate && ` ~ ${t.endDate.slice(0, 10)}`}
+              </td>
+              <td className="px-3 py-2 text-slate-700">{t.user?.name ?? "—"}</td>
+              <td className="px-3 py-2 text-right tabular-nums font-semibold text-slate-900">₩{Number(t.totalCost).toLocaleString()}</td>
+              <td className="px-3 py-2">
+                <span className={clsx("text-[10.5px] px-2 py-0.5 rounded font-medium", APPROVAL_STATUS_COLOR[t.status] ?? "bg-slate-100")}>
+                  {statusLabel(t.status)}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/* ─────────── 휴가신청서 목록 ─────────── */
+function LeaveList({ items }: { items: LeaveRow[] }) {
+  if (items.length === 0) {
+    return (
+      <div className="bg-white border border-slate-200 rounded-lg py-16 text-center text-sm text-slate-400">
+        휴가신청서가 없습니다. 사이드바 ▸ 전자결재 ▸ 휴가신청서에서 작성하세요.
+      </div>
+    );
+  }
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+      <table className="w-full text-xs">
+        <thead className="bg-slate-50">
+          <tr className="text-[11px] text-slate-500 font-medium border-b border-slate-200">
+            <th className="text-left px-3 py-2.5 w-24">신청일자</th>
+            <th className="text-left px-3 py-2.5 w-20">종류</th>
+            <th className="text-left px-3 py-2.5 w-44">기간</th>
+            <th className="text-right px-3 py-2.5 w-16">일수</th>
+            <th className="text-left px-3 py-2.5 w-24">기안자</th>
+            <th className="text-left px-3 py-2.5">결재 진행</th>
+            <th className="text-left px-3 py-2.5 w-24">상태</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((l) => (
+            <tr key={l.id} className="border-b border-slate-100 hover:bg-emerald-50/30">
+              <td className="px-3 py-2 font-mono text-[11px] text-slate-600 tabular-nums">{l.createdAt.slice(0, 10)}</td>
+              <td className="px-3 py-2">
+                <span className="text-[10.5px] px-1.5 py-0.5 rounded font-medium bg-blue-100 text-blue-800">
+                  {LEAVE_LABEL[l.type] ?? l.type}
+                </span>
+              </td>
+              <td className="px-3 py-2 text-[11px] text-slate-600 tabular-nums">
+                {l.startDate.slice(0, 10)}
+                {l.endDate !== l.startDate && ` ~ ${l.endDate.slice(0, 10)}`}
+              </td>
+              <td className="px-3 py-2 text-right tabular-nums font-semibold text-slate-900">{l.days}</td>
+              <td className="px-3 py-2 text-slate-700">{l.user?.name ?? "—"}</td>
+              <td className="px-3 py-2 text-[10.5px] text-slate-600">
+                {l.approvals.map((a, i) => (
+                  <span key={i} className="inline-flex items-center gap-0.5 mr-1.5">
+                    <span className={clsx("w-1.5 h-1.5 rounded-full", a.status === "approved" ? "bg-emerald-500" : a.status === "rejected" ? "bg-rose-500" : a.status === "auto_passed" ? "bg-slate-400" : "bg-amber-500")} />
+                    <span className="text-slate-600">{a.approver?.name}</span>
+                  </span>
+                ))}
+              </td>
+              <td className="px-3 py-2">
+                <span className={clsx("text-[10.5px] px-2 py-0.5 rounded font-medium", APPROVAL_STATUS_COLOR[l.status] ?? "bg-slate-100")}>
+                  {statusLabel(l.status)}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
