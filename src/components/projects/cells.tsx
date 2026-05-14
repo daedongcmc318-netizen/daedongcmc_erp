@@ -2,7 +2,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import clsx from "clsx";
-import { Check, ChevronDown, Plus, Loader2 } from "lucide-react";
+import { Check, ChevronDown, Plus, Loader2, ChevronUp, X, Trash2 } from "lucide-react";
 
 /* ─────────── 텍스트 ─────────── */
 export function InlineText({
@@ -264,8 +264,8 @@ export function DateRange({
   );
 }
 
-/* ─────────── 드롭다운 (pill) — portal + 위/아래 자동감지 + 옵션 추가 ─────────── */
-export function PillSelect<T extends { value: string; label: string; color?: string }>({
+/* ─────────── 드롭다운 (pill) — portal + 위/아래 자동감지 + 옵션 추가/재정렬/삭제 ─────────── */
+export function PillSelect<T extends { value: string; label: string; color?: string; id?: string }>({
   value,
   options,
   onChange,
@@ -273,6 +273,8 @@ export function PillSelect<T extends { value: string; label: string; color?: str
   placeholder,
   addCategory,
   onOptionAdded,
+  onOptionReorder,
+  onOptionRemove,
 }: {
   value: string | null;
   options: readonly T[];
@@ -281,7 +283,11 @@ export function PillSelect<T extends { value: string; label: string; color?: str
   placeholder?: string;
   /** 카테고리 명시 시 '옵션 추가' 버튼 노출 (DropdownOption 테이블 저장) */
   addCategory?: string;
-  onOptionAdded?: (created: { id: string; category: string; value: string; label: string; color: string | null }) => void;
+  onOptionAdded?: (created: { id: string; category: string; value: string; label: string; color: string | null; sortOrder: number }) => void;
+  /** 옵션에 id가 있으면 ▲▼ 재정렬 버튼 표시 (사용자 추가 옵션만) */
+  onOptionReorder?: (id: string, direction: "up" | "down") => void | Promise<void>;
+  /** 옵션에 id가 있으면 ✕ 삭제 버튼 표시 */
+  onOptionRemove?: (id: string) => void | Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -382,18 +388,67 @@ export function PillSelect<T extends { value: string; label: string; color?: str
                 transform: pos.placement === "up" ? "translateY(-100%)" : undefined,
               }}
             >
-              {options.map((o) => (
-                <button
-                  key={o.value}
-                  onClick={() => {
-                    onChange(o.value);
-                    setOpen(false);
-                  }}
-                  className="w-full text-left px-2 py-1 hover:bg-slate-100 flex items-center gap-2"
-                >
-                  {renderPill(o)}
-                </button>
-              ))}
+              {options.map((o) => {
+                const isCustom = !!o.id;
+                return (
+                  <div
+                    key={o.value}
+                    className="group/opt flex items-center gap-1 px-2 py-1 hover:bg-slate-100"
+                  >
+                    <button
+                      onClick={() => {
+                        onChange(o.value);
+                        setOpen(false);
+                      }}
+                      className="flex-1 text-left flex items-center gap-2 min-w-0"
+                    >
+                      {renderPill(o)}
+                    </button>
+                    {isCustom && (
+                      <div className="opacity-0 group-hover/opt:opacity-100 flex items-center gap-0.5 transition shrink-0">
+                        {onOptionReorder && (
+                          <>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onOptionReorder(o.id!, "up");
+                              }}
+                              className="p-0.5 rounded text-slate-400 hover:text-brand-600 hover:bg-white"
+                              title="위로"
+                            >
+                              <ChevronUp className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onOptionReorder(o.id!, "down");
+                              }}
+                              className="p-0.5 rounded text-slate-400 hover:text-brand-600 hover:bg-white"
+                              title="아래로"
+                            >
+                              <ChevronDown className="w-3 h-3" />
+                            </button>
+                          </>
+                        )}
+                        {onOptionRemove && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm(`'${o.label}' 옵션을 삭제하시겠습니까?`)) {
+                                onOptionRemove(o.id!);
+                              }
+                            }}
+                            className="p-0.5 rounded text-slate-400 hover:text-rose-500 hover:bg-white"
+                            title="삭제"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
               {addCategory && (
                 <div className="border-t border-slate-100 mt-1 pt-1">
                   {adding ? (
