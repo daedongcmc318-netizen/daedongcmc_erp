@@ -8,7 +8,7 @@ import {
   NURTURE_TYPE,
   REQUEST_STATUS,
 } from "@/lib/enums";
-import { Plus, X, Search, Trash2, ChevronDown, GripVertical, History, Download, UserCheck } from "lucide-react";
+import { Plus, X, Search, Trash2, ChevronDown, GripVertical, History, Download, UserCheck, Printer, FileSpreadsheet } from "lucide-react";
 import clsx from "clsx";
 import {
   InlineText,
@@ -160,7 +160,7 @@ const FROZEN_NURTURE = ["drag", "year", "displayCode", "title"] as const;
 const FROZEN_DISCOVERY = ["drag", "year", "title"] as const;
 // 컬럼 폭(px) — Tailwind w-* 클래스와 동기화 필요
 const COL_PX: Record<string, number> = {
-  drag: 32, // w-8
+  drag: 64, // w-16 — 체크박스 + 드래그 핸들 같이
   year: 64, // w-16
   displayCode: 64, // w-16
   title: 288, // w-72
@@ -179,7 +179,7 @@ function isLastFrozen(tab: "nurture" | "discovery", col: string): boolean {
 }
 
 const COL_META: Record<string, { label: string; w: string }> = {
-  drag: { label: "", w: "w-8" },
+  drag: { label: "", w: "w-16" },
   year: { label: "연도", w: "w-16" },
   displayCode: { label: "구분", w: "w-16" },
   title: { label: "업체·기관명", w: "w-72" },
@@ -247,6 +247,7 @@ export default function ProjectsClient({
   const router = useRouter();
   const [historyOpen, setHistoryOpen] = useState(false);
   const [projects, setProjects] = useState<Project[]>(initialProjects);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // 연도 라우팅 변경 시 server props 동기화
   useEffect(() => {
@@ -449,6 +450,94 @@ export default function ProjectsClient({
     router.refresh();
   }
 
+  async function bulkDelete() {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    if (!confirm(`선택한 ${ids.length}건을 삭제하시겠습니까?`)) return;
+    const res = await fetch("/api/projects/bulk-delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    });
+    if (!res.ok) { alert("일괄 삭제 실패"); return; }
+    const json = await res.json();
+    setProjects((prev) => prev.filter((p) => !selectedIds.has(p.id)));
+    setSelectedIds(new Set());
+    router.refresh();
+    alert(`${json.deleted}건 삭제 완료`);
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    const allIds = filtered.map((p) => p.id);
+    const allSelected = allIds.length > 0 && allIds.every((id) => selectedIds.has(id));
+    setSelectedIds(() => {
+      if (allSelected) {
+        const next = new Set(selectedIds);
+        allIds.forEach((id) => next.delete(id));
+        return next;
+      } else {
+        return new Set([...Array.from(selectedIds), ...allIds]);
+      }
+    });
+  }
+
+  function printCurrentView() {
+    if (filtered.length === 0) { alert("인쇄할 프로젝트가 없습니다."); return; }
+    const w = window.open("", "_blank", "width=1200,height=1500");
+    if (!w) { alert("팝업이 차단되었습니다."); return; }
+    const today = new Date().toISOString().slice(0, 10);
+    const tabLabel = tab === "nurture" ? "육성" : "발굴";
+    const totalRevenue = filtered.reduce((acc, p) => acc + Number(p.confirmedRevenue ?? 0), 0);
+    const escape = (s: any) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const bizL: any = { innovation: "혁신바우처", export: "수출바우처", contract: "용역", certification: "인증", rental: "임대" };
+    const statusL: any = { request_received: "서비스요청수신", contract_pending: "수행계약대기", cost_audit: "원가감리", in_progress: "서비스진행중", review_pending: "성과물검토중", settlement_request: "정산승인요청", settlement_done: "정산완료", payment_done: "입금완료" };
+    const serviceL: any = { consulting: "혁신컨설팅", marketing: "혁신마케팅", tech_support: "혁신기술지원", export_consulting: "수출컨설팅", translation: "통번역", exhibition: "전시회행사", contract_work: "용역컨설팅", certification: "인증", rental: "임대", cost_settlement: "비용정산" };
+    const rows = filtered.map((p) => `<tr>
+        <td>${escape(p.displayCode)}</td>
+        <td>${escape(p.title)}</td>
+        <td>${escape(bizL[p.bizCategory] ?? p.bizCategory)}</td>
+        <td>${escape(serviceL[p.serviceType ?? ""] ?? p.serviceType ?? "")}</td>
+        <td>${escape(p.serviceDetail)}</td>
+        <td>${escape(statusL[p.status] ?? p.status)}</td>
+        <td>${escape(p.pmCode)}</td>
+        <td>${escape(p.manager?.name)}</td>
+        <td class="num">₩${Number(p.confirmedRevenue).toLocaleString()}</td>
+      </tr>`).join("");
+
+    w.document.write(`<!doctype html><html lang="ko"><head><meta charset="utf-8">
+<title>프로젝트 관리 - ${currentYear}년 ${tabLabel}</title>
+<style>
+  *{box-sizing:border-box;-webkit-print-color-adjust:exact}
+  body{font-family:'Malgun Gothic','맑은 고딕',sans-serif;color:#111;margin:14mm 10mm;font-size:10.5px}
+  h1{font-size:16px;margin:0 0 4px}
+  .meta{font-size:11px;color:#555;margin-bottom:10px}
+  table{width:100%;border-collapse:collapse}
+  th,td{border:1px solid #555;padding:5px 6px;font-size:10px;vertical-align:middle;text-align:left}
+  th{background:#f3f4f6;text-align:center;font-weight:600;white-space:nowrap}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  tfoot td{font-weight:700;background:#f9fafb}
+  @media print{body{margin:8mm 6mm}}
+</style></head><body>
+  <h1>프로젝트 관리 — ${currentYear}년 ${tabLabel}${selectedManager ? ` · ${escape(selectedManager.name)} 담당` : ""}</h1>
+  <div class="meta">총 ${filtered.length}건 · 합계 ₩${totalRevenue.toLocaleString()} · 출력일 ${today}</div>
+  <table>
+    <thead><tr><th>코드</th><th>프로젝트명</th><th>분야</th><th>서비스</th><th>상세서비스</th><th>진행현황</th><th>PM</th><th>담당자</th><th class="num">확정매출</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr><td colspan="8" style="text-align:right">합계</td><td class="num">₩${totalRevenue.toLocaleString()}</td></tr></tfoot>
+  </table>
+  <script>window.onload=function(){setTimeout(function(){window.print()},250)}</script>
+</body></html>`);
+    w.document.close();
+  }
+
   async function reorderRows(targetId: string) {
     if (!dragId || dragId === targetId) return;
     const tabProjects = projects.filter((p) => p.source === tab).sort((a, b) => a.sortOrder - b.sortOrder);
@@ -613,6 +702,8 @@ export default function ProjectsClient({
                   const left = getStickyLeft(tab, c);
                   const isFrozen = left !== null;
                   const last = isFrozen && isLastFrozen(tab, c);
+                  const allChecked =
+                    c === "drag" && filtered.length > 0 && filtered.every((p) => selectedIds.has(p.id));
                   return (
                     <th
                       key={c}
@@ -624,7 +715,17 @@ export default function ProjectsClient({
                       )}
                       style={isFrozen ? { left: `${left}px`, zIndex: 20 } : undefined}
                     >
-                      {COL_META[c].label}
+                      {c === "drag" ? (
+                        <input
+                          type="checkbox"
+                          checked={allChecked}
+                          onChange={toggleSelectAll}
+                          className="cursor-pointer rounded border-slate-300 text-brand-600 focus:ring-brand-300"
+                          title={allChecked ? "전체 선택 해제" : "전체 선택"}
+                        />
+                      ) : (
+                        COL_META[c].label
+                      )}
                     </th>
                   );
                 })}
@@ -639,6 +740,8 @@ export default function ProjectsClient({
                   tab={tab}
                   users={users}
                   isDragOver={dragOverId === p.id}
+                  isSelected={selectedIds.has(p.id)}
+                  onToggleSelect={() => toggleSelect(p.id)}
                   onPatch={(patch) => startTransition(() => patchProject(p.id, patch))}
                   onPatchInvoice={(invId, patch) => startTransition(() => patchInvoice(invId, p.id, patch))}
                   onCreateInvoice={(patch) => startTransition(() => createInvoice(p.id, patch))}
@@ -669,6 +772,47 @@ export default function ProjectsClient({
         >
           <Plus className="w-3.5 h-3.5" /> 새 프로젝트 추가
         </button>
+      </div>
+
+      {/* 하단 액션 바 (이카운트 스타일) */}
+      <div className="mt-3 bg-white border border-slate-200 rounded-lg px-3 py-2 flex items-center gap-2">
+        <button
+          onClick={() => addProject()}
+          className="h-9 px-4 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded flex items-center gap-1.5 shadow-sm"
+        >
+          <Plus className="w-4 h-4" /> 신규 (F2)
+        </button>
+        <button
+          onClick={printCurrentView}
+          className="h-9 px-3 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-sm font-medium rounded flex items-center gap-1.5"
+          title="현재 화면을 PDF로 인쇄"
+        >
+          <Printer className="w-3.5 h-3.5" /> 인쇄
+        </button>
+        <button
+          onClick={bulkDelete}
+          disabled={selectedIds.size === 0}
+          className={clsx(
+            "h-9 px-3 text-sm font-medium rounded flex items-center gap-1.5 border",
+            selectedIds.size === 0
+              ? "bg-white text-slate-400 border-slate-200 cursor-not-allowed"
+              : "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
+          )}
+        >
+          <Trash2 className="w-3.5 h-3.5" /> 선택삭제 {selectedIds.size > 0 && `(${selectedIds.size})`}
+        </button>
+        <a
+          href={`/api/projects/export?year=${currentYear}${currentManagerId ? `&manager=${currentManagerId}` : ""}`}
+          download
+          className="h-9 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-sm font-medium rounded flex items-center gap-1.5"
+          title="엑셀 다운로드"
+        >
+          <FileSpreadsheet className="w-3.5 h-3.5" /> Excel
+        </a>
+        <span className="ml-auto text-[11px] text-slate-400">
+          {selectedIds.size > 0 ? `${selectedIds.size}건 선택됨 · ` : ""}
+          전체 {filtered.length}건
+        </span>
       </div>
 
       {/* 거래처 이력 검색 모달 */}
@@ -752,6 +896,8 @@ function ProjectRow({
   tab,
   users,
   isDragOver,
+  isSelected,
+  onToggleSelect,
   onPatch,
   onPatchInvoice,
   onCreateInvoice,
@@ -767,6 +913,8 @@ function ProjectRow({
   tab: "nurture" | "discovery";
   users: User[];
   isDragOver: boolean;
+  isSelected: boolean;
+  onToggleSelect: () => void;
   onPatch: (patch: any) => void;
   onPatchInvoice: (invoiceId: string, patch: any) => void;
   onCreateInvoice: (patch: any) => void;
@@ -811,7 +959,7 @@ function ProjectRow({
             )}
             style={isFrozen ? { left: `${left}px`, zIndex: 5 } : undefined}
           >
-            {renderCell(c, project, inv, contact, users, onPatch, invUpdate, onUpsertDeliverable, onDelete, onDragStart, onInsertAfter)}
+            {renderCell(c, project, inv, contact, users, onPatch, invUpdate, onUpsertDeliverable, onDelete, onDragStart, onInsertAfter, isSelected, onToggleSelect)}
           </td>
         );
       })}
@@ -830,13 +978,22 @@ function renderCell(
   onUpsertDeliverable: (seq: number, patch: any) => void,
   onDelete: () => void,
   onDragStart: () => void,
-  onInsertAfter: () => void
+  onInsertAfter: () => void,
+  isSelected: boolean,
+  onToggleSelect: () => void
 ) {
   const getDeliverable = (seq: number) => p.deliverables.find((d) => d.seq === seq) ?? null;
   switch (c) {
     case "drag":
       return (
-        <div className="relative">
+        <div className="relative flex items-center gap-1">
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={onToggleSelect}
+            onClick={(e) => e.stopPropagation()}
+            className="cursor-pointer rounded border-slate-300 text-brand-600 focus:ring-brand-300 w-3.5 h-3.5"
+          />
           <button
             draggable
             onDragStart={onDragStart}

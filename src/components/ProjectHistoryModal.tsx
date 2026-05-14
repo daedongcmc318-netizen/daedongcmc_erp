@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { X, Search, History, Loader2, ExternalLink } from "lucide-react";
+import { X, Search, History, Loader2, ExternalLink, Printer } from "lucide-react";
 import clsx from "clsx";
 import { BIZ_CATEGORY, PROJECT_STATUS, getBizMeta, getStatusMeta, getServiceLabel } from "@/lib/enums";
 
@@ -24,6 +24,16 @@ type Response = {
   byYear: Record<number, Project[]>;
   byCompany: Record<string, Project[]>;
 };
+
+function escapeHtml(s: string | null | undefined): string {
+  if (!s) return "";
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 export default function ProjectHistoryModal({ onClose }: { onClose: () => void }) {
   const router = useRouter();
@@ -66,6 +76,109 @@ export default function ProjectHistoryModal({ onClose }: { onClose: () => void }
   function goToProject(p: Project) {
     router.push(`/projects?year=${p.year}`);
     onClose();
+  }
+
+  function printResults() {
+    if (!data || data.items.length === 0) {
+      alert("인쇄할 결과가 없습니다.");
+      return;
+    }
+    const w = window.open("", "_blank", "width=1100,height=1400");
+    if (!w) {
+      alert("팝업이 차단되었습니다.");
+      return;
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    const totalRevenue = data.items.reduce((s, p) => s + Number(p.confirmedRevenue), 0);
+
+    const rowsHtml = data.items
+      .map(
+        (p) => `
+        <tr>
+          <td>${p.year}</td>
+          <td>${p.displayCode ?? ""}</td>
+          <td>${escapeHtml(p.title)}</td>
+          <td>${escapeHtml(p.company?.name ?? "")}</td>
+          <td>${escapeHtml(getBizMeta(p.bizCategory).label)}</td>
+          <td>${escapeHtml(getServiceLabel(p.serviceType) || "")}</td>
+          <td>${escapeHtml(p.serviceDetail ?? "")}</td>
+          <td>${escapeHtml(getStatusMeta(p.status).label)}</td>
+          <td>${escapeHtml(p.manager?.name ?? "")}</td>
+          <td class="num">₩${Number(p.confirmedRevenue).toLocaleString()}</td>
+        </tr>`
+      )
+      .join("");
+
+    w.document.write(`<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>거래처 이력 검색 결과 - ${escapeHtml(q)}</title>
+<style>
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body {
+    font-family: 'Malgun Gothic', '맑은 고딕', sans-serif;
+    color: #111;
+    margin: 14mm 12mm;
+    font-size: 11px;
+  }
+  .header { margin-bottom: 12px; }
+  .header h1 { font-size: 18px; margin: 0 0 4px; font-weight: bold; }
+  .header .meta { font-size: 11px; color: #555; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td {
+    border: 1px solid #555;
+    padding: 5px 7px;
+    font-size: 10.5px;
+    text-align: left;
+    vertical-align: middle;
+  }
+  th { background: #f3f4f6; font-weight: 600; text-align: center; white-space: nowrap; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tfoot td { font-weight: 700; background: #f9fafb; }
+  .footer-info { margin-top: 14px; font-size: 10.5px; color: #555; text-align: right; }
+  @media print {
+    body { margin: 10mm 10mm; }
+    button { display: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>거래처 이력 검색 결과</h1>
+    <div class="meta">
+      검색어: <strong>${escapeHtml(q)}</strong> · 총 ${data.items.length.toLocaleString()}건 ·
+      합계 ₩${totalRevenue.toLocaleString()} · 출력일: ${today}
+    </div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>연도</th>
+        <th>코드</th>
+        <th>프로젝트명</th>
+        <th>거래처</th>
+        <th>분야</th>
+        <th>서비스</th>
+        <th>상세서비스</th>
+        <th>진행현황</th>
+        <th>담당자</th>
+        <th class="num">확정매출</th>
+      </tr>
+    </thead>
+    <tbody>${rowsHtml}</tbody>
+    <tfoot>
+      <tr>
+        <td colspan="9" style="text-align: right;">합계</td>
+        <td class="num">₩${totalRevenue.toLocaleString()}</td>
+      </tr>
+    </tfoot>
+  </table>
+  <div class="footer-info">(주)대동CMC · 대동 통합 ERP</div>
+  <script>window.onload = function(){ setTimeout(function(){ window.print(); }, 250); };</script>
+</body>
+</html>`);
+    w.document.close();
   }
 
   return (
@@ -172,9 +285,20 @@ export default function ProjectHistoryModal({ onClose }: { onClose: () => void }
         {/* 푸터 */}
         <div className="border-t border-slate-200 px-5 py-3 flex items-center justify-between bg-slate-50 text-[11px] text-slate-500">
           <span>💡 행을 클릭하면 해당 연도의 프로젝트 관리 페이지로 이동합니다</span>
-          <button onClick={onClose} className="h-8 px-3 text-xs text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded">
-            닫기
-          </button>
+          <div className="flex items-center gap-2">
+            {data && data.items.length > 0 && (
+              <button
+                onClick={printResults}
+                className="h-8 px-3 text-xs text-white bg-brand-600 hover:bg-brand-700 rounded inline-flex items-center gap-1.5 font-medium"
+                title="검색 결과를 PDF로 인쇄"
+              >
+                <Printer className="w-3.5 h-3.5" /> PDF 인쇄
+              </button>
+            )}
+            <button onClick={onClose} className="h-8 px-3 text-xs text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded">
+              닫기
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -279,6 +403,18 @@ function ProjectRow({
         <span className={clsx("px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap", status.color)}>
           {status.label}
         </span>
+      </td>
+      <td className="px-3 py-2 w-24">
+        {project.manager ? (
+          <span className="inline-flex items-center gap-1 text-[11px]">
+            <span className="w-4 h-4 rounded-full bg-brand-100 text-brand-700 text-[9px] font-semibold flex items-center justify-center shrink-0">
+              {project.manager.name.slice(0, 1)}
+            </span>
+            <span className="truncate">{project.manager.name}</span>
+          </span>
+        ) : (
+          <span className="text-slate-300 text-[11px]">—</span>
+        )}
       </td>
       <td className="px-3 py-2 w-32 text-right tabular-nums text-slate-700">
         ₩{Number(project.confirmedRevenue).toLocaleString()}
