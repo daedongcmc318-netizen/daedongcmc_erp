@@ -48,6 +48,7 @@ model User {
   householderType    String?  // head / member / spouse
   annualLeaveTotal   Float    @default(0)
   annualLeaveUsed    Float    @default(0)
+  isInternal         Boolean  @default(false) // 내부직원 여부 (연차/근태 대상)
   passwordHash       String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -58,6 +59,7 @@ model User {
   attendance         Attendance[]
   leaveRequests      LeaveRequest[] @relation("LeaveRequester")
   approvedLeaves     LeaveRequest[] @relation("LeaveApprover")
+  leaveApprovals     LeaveApproval[] @relation("LeaveApprovalApprover")
   educations         UserEducation[]
   certificates       Certificate[]    @relation("UserCertificates")
 }
@@ -410,37 +412,64 @@ model ExpenseRequest {
 model Attendance {
   id              String   @id @default(cuid())
   userId          String
-  date            DateTime
+  date            DateTime @db.Date
   checkIn         DateTime?
   checkOut        DateTime?
-  status          String   // working / off / leave / half_am / half_pm / absent / holiday
+  status          String   @default("working") // working / off / leave / half_am / half_pm / absent / holiday
   checkInLocation String?
+  checkInIp       String?
+  checkOutIp      String?
   notes           String?
   createdAt       DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, date])
+  @@index([date])
 }
 
 model LeaveRequest {
   id           String    @id @default(cuid())
   userId       String
-  type         String    // annual / half_am / half_pm / sick / special
+  type         String    // annual(연차) / monthly(월차) / half_am(오전반차) / half_pm(오후반차)
   startDate    DateTime
   endDate      DateTime
   days         Float
   reason       String?
-  status       String    @default("pending")
-  approverId   String?
-  approvedDate DateTime?
+  status       String    @default("pending") // pending / approved / rejected / cancelled
+  // 결재 진행
+  currentLevel Int       @default(1) // 1=본부장 / 2=부대표 / 3=대표이사
+  finalApprovedAt DateTime?
+  approverId   String?   // 최종 결재자 id (호환용)
+  approvedDate DateTime? // 최종 결재 일자 (호환용)
   createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  user     User  @relation("LeaveRequester", fields: [userId], references: [id], onDelete: Cascade)
-  approver User? @relation("LeaveApprover", fields: [approverId], references: [id])
+  user      User  @relation("LeaveRequester", fields: [userId], references: [id], onDelete: Cascade)
+  approver  User? @relation("LeaveApprover", fields: [approverId], references: [id])
+  approvals LeaveApproval[]
 
   @@index([userId])
   @@index([status])
+  @@index([currentLevel])
+}
+
+// 휴가 신청 결재 라인 (단계별 결재 이력)
+model LeaveApproval {
+  id           String   @id @default(cuid())
+  requestId    String
+  level        Int      // 1=본부장 / 2=부대표 / 3=대표이사
+  approverId   String
+  status       String   @default("pending") // pending / approved / rejected / auto_passed
+  comment      String?
+  decidedAt    DateTime?
+  createdAt    DateTime @default(now())
+
+  request  LeaveRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  approver User         @relation("LeaveApprovalApprover", fields: [approverId], references: [id])
+
+  @@unique([requestId, level])
+  @@index([approverId, status])
 }
 
 // ─────────────────────────────── 업체별 관리비 (admin 전용) ───────────────────────────────

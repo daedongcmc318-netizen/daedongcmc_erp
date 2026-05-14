@@ -31,6 +31,7 @@ export type User = {
   postCode: string | null;
   address: string | null;
   passportNo: string | null;
+  isInternal?: boolean;
 };
 
 const DEPTS = [

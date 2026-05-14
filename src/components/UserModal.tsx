@@ -200,6 +200,19 @@ export default function UserModal({
                       className="form-input"
                     />
                   </Field>
+                  <Field label="내부직원 (근태·연차 대상)">
+                    <label className="flex items-center gap-2 h-9 px-3 border border-slate-200 rounded bg-white cursor-pointer hover:border-brand-300">
+                      <input
+                        type="checkbox"
+                        checked={!!(draft as any).isInternal}
+                        onChange={(e) => set("isInternal" as any, e.target.checked as any)}
+                        className="rounded border-slate-300 text-brand-600 focus:ring-brand-300 w-4 h-4"
+                      />
+                      <span className="text-[12px] text-slate-700">
+                        {(draft as any).isInternal ? "내부직원 (활성)" : "외부/위촉 (비활성)"}
+                      </span>
+                    </label>
+                  </Field>
                 </Grid>
               </Section>
 
