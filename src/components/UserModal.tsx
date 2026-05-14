@@ -221,10 +221,12 @@ export default function UserModal({
                         set("consultantGrade" as any, grade as any);
                         // 등급 선택 시 기본 일단가 자동 채움
                         const defaultRate: Record<string, number> = {
+                          "특급": 985000,
                           "1급": 834000,
                           "2급": 757000,
                           "3급": 644000,
                           "4급": 518000,
+                          "5급": 388000,
                         };
                         if (grade && defaultRate[grade] && !Number((draft as any).consultantRate)) {
                           set("consultantRate" as any, defaultRate[grade] as any);
@@ -233,10 +235,12 @@ export default function UserModal({
                       className="form-input"
                     >
                       <option value="">— 미설정 (MD 플래너 미참여) —</option>
+                      <option value="특급">특급 (₩985,000)</option>
                       <option value="1급">1급 (₩834,000)</option>
                       <option value="2급">2급 (₩757,000)</option>
                       <option value="3급">3급 (₩644,000)</option>
                       <option value="4급">4급 (₩518,000)</option>
+                      <option value="5급">5급 (₩388,000)</option>
                     </select>
                   </Field>
                   <Field label="컨설턴트 일단가 (원)">
