@@ -272,7 +272,13 @@ export default function ProjectsClient({
   const optionsFor = (category: string) =>
     customOptions
       .filter((o) => o.category === category)
-      .map((o) => ({ id: o.id, value: o.value, label: o.label, color: o.color ?? undefined }));
+      .map((o) => ({
+        id: o.id,
+        value: o.value,
+        label: o.label,
+        color: o.color ?? undefined,
+        sortOrder: o.sortOrder,
+      }));
 
   /** 옵션 추가 시 즉시 state에 반영 */
   const handleOptionAdded = (created: CustomOption) => {
@@ -282,32 +288,15 @@ export default function ProjectsClient({
     });
   };
 
-  /** 옵션 순서 변경 — 같은 category 내 인접 swap */
-  const handleOptionReorder = async (id: string, direction: "up" | "down") => {
-    const target = customOptions.find((o) => o.id === id);
-    if (!target) return;
-    // 같은 category의 인접 옵션 찾기
-    const sameCat = customOptions
-      .filter((o) => o.category === target.category)
-      .slice()
-      .sort((a, b) => a.sortOrder - b.sortOrder);
-    const idx = sameCat.findIndex((o) => o.id === id);
-    const neighborIdx = direction === "up" ? idx - 1 : idx + 1;
-    if (neighborIdx < 0 || neighborIdx >= sameCat.length) return;
-    const neighbor = sameCat[neighborIdx];
-    // 옵티미스틱: state에서 sortOrder swap
+  /** 옵션 순서 변경 — PillSelect가 머지된 정렬 리스트 기준으로 새 sortOrder 계산해서 전달 */
+  const handleOptionReorder = async (id: string, newSortOrder: number) => {
     setCustomOptions((prev) =>
-      prev.map((o) => {
-        if (o.id === target.id) return { ...o, sortOrder: neighbor.sortOrder };
-        if (o.id === neighbor.id) return { ...o, sortOrder: target.sortOrder };
-        return o;
-      })
+      prev.map((o) => (o.id === id ? { ...o, sortOrder: newSortOrder } : o))
     );
-    // 서버 동기화
     const res = await fetch(`/api/dropdown-options/${id}/reorder`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ direction }),
+      body: JSON.stringify({ sortOrder: newSortOrder }),
     });
     if (!res.ok) {
       alert("순서 변경 실패");
@@ -1066,9 +1055,9 @@ function ProjectRow({
   onDrop: () => void;
   onInsertAfter: () => void;
   onOpenNotes: () => void;
-  customOptionsFor: (category: string) => { id: string; value: string; label: string; color?: string }[];
+  customOptionsFor: (category: string) => { id: string; value: string; label: string; color?: string; sortOrder: number }[];
   onOptionAdded: (created: CustomOption) => void;
-  onOptionReorder: (id: string, direction: "up" | "down") => void | Promise<void>;
+  onOptionReorder: (id: string, newSortOrder: number) => void | Promise<void>;
   onOptionRemove: (id: string) => void | Promise<void>;
 }) {
   const inv = project.taxInvoices[0] ?? null;
@@ -1133,9 +1122,9 @@ function renderCell(
   isSelected: boolean,
   onToggleSelect: () => void,
   onOpenNotes: () => void,
-  customOptionsFor: (category: string) => { id: string; value: string; label: string; color?: string }[],
+  customOptionsFor: (category: string) => { id: string; value: string; label: string; color?: string; sortOrder: number }[],
   onOptionAdded: (created: CustomOption) => void,
-  onOptionReorder: (id: string, direction: "up" | "down") => void | Promise<void>,
+  onOptionReorder: (id: string, newSortOrder: number) => void | Promise<void>,
   onOptionRemove: (id: string) => void | Promise<void>
 ) {
   const getDeliverable = (seq: number) => p.deliverables.find((d) => d.seq === seq) ?? null;
@@ -1214,14 +1203,15 @@ function renderCell(
       );
     }
     case "bizCategory": {
-      const merged = [
-        ...BIZ_CATEGORY,
-        ...customOptionsFor("bizCategory").map((o) => ({
-          value: o.value,
-          label: o.label,
-          color: o.color ?? "bg-slate-50 text-slate-700 ring-slate-200",
-        })),
-      ];
+      const hardcoded = BIZ_CATEGORY.map((b, i) => ({ ...b, sortOrder: i + 1 }));
+      const custom = customOptionsFor("bizCategory").map((o) => ({
+        id: o.id,
+        value: o.value,
+        label: o.label,
+        color: o.color ?? "bg-slate-50 text-slate-700 ring-slate-200",
+        sortOrder: o.sortOrder ?? 10000,
+      }));
+      const merged = [...hardcoded, ...custom].sort((a, b) => a.sortOrder - b.sortOrder);
       return (
         <PillSelect
           value={p.bizCategory}
@@ -1251,10 +1241,11 @@ function renderCell(
         />
       );
     case "serviceType": {
-      const mergedSvc = [
-        ...SERVICE_TYPE,
-        ...customOptionsFor("serviceType").map((o) => ({ value: o.value, label: o.label })),
-      ];
+      const hardcodedSvc = SERVICE_TYPE.map((s, i) => ({ ...s, sortOrder: i + 1 }));
+      const customSvc = customOptionsFor("serviceType").map((o) => ({
+        id: o.id, value: o.value, label: o.label, sortOrder: o.sortOrder ?? 10000,
+      }));
+      const mergedSvc = [...hardcodedSvc, ...customSvc].sort((a, b) => a.sortOrder - b.sortOrder);
       return (
         <PillSelect
           value={p.serviceType}
@@ -1270,14 +1261,15 @@ function renderCell(
       );
     }
     case "status": {
-      const mergedStatus = [
-        ...PROJECT_STATUS,
-        ...customOptionsFor("projectStatus").map((o) => ({
-          value: o.value,
-          label: o.label,
-          color: o.color ?? "bg-slate-100 text-slate-700",
-        })),
-      ];
+      const hardcodedStatus = PROJECT_STATUS.map((s, i) => ({ ...s, sortOrder: i + 1 }));
+      const customStatus = customOptionsFor("projectStatus").map((o) => ({
+        id: o.id,
+        value: o.value,
+        label: o.label,
+        color: o.color ?? "bg-slate-100 text-slate-700",
+        sortOrder: o.sortOrder ?? 10000,
+      }));
+      const mergedStatus = [...hardcodedStatus, ...customStatus].sort((a, b) => a.sortOrder - b.sortOrder);
       return (
         <PillSelect
           value={p.status}
@@ -1388,14 +1380,15 @@ function renderCell(
         />
       );
     case "nurtureType": {
-      const mergedNur = [
-        ...NURTURE_TYPE,
-        ...customOptionsFor("nurtureType").map((o) => ({
-          value: o.value,
-          label: o.label,
-          color: o.color ?? "bg-slate-50 text-slate-700 ring-slate-200",
-        })),
-      ];
+      const hardcodedNur = NURTURE_TYPE.map((n, i) => ({ ...n, sortOrder: i + 1 }));
+      const customNur = customOptionsFor("nurtureType").map((o) => ({
+        id: o.id,
+        value: o.value,
+        label: o.label,
+        color: o.color ?? "bg-slate-50 text-slate-700 ring-slate-200",
+        sortOrder: o.sortOrder ?? 10000,
+      }));
+      const mergedNur = [...hardcodedNur, ...customNur].sort((a, b) => a.sortOrder - b.sortOrder);
       return (
         <PillSelect
           value={p.nurtureType}
@@ -1416,10 +1409,11 @@ function renderCell(
       );
     }
     case "requestStatus": {
-      const mergedReq = [
-        ...REQUEST_STATUS,
-        ...customOptionsFor("requestStatus").map((o) => ({ value: o.value, label: o.label })),
-      ];
+      const hardcodedReq = REQUEST_STATUS.map((r, i) => ({ ...r, sortOrder: i + 1 }));
+      const customReq = customOptionsFor("requestStatus").map((o) => ({
+        id: o.id, value: o.value, label: o.label, sortOrder: o.sortOrder ?? 10000,
+      }));
+      const mergedReq = [...hardcodedReq, ...customReq].sort((a, b) => a.sortOrder - b.sortOrder);
       return (
         <PillSelect
           value={p.requestStatus}

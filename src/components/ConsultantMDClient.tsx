@@ -319,9 +319,9 @@ export default function ConsultantMDClient({
         <div>
           <div className="flex items-center gap-2 mb-1">
             <CalendarDays className="w-4 h-4 text-brand-500" />
-            <span className="text-xs text-slate-500">프로젝트 관리 ▸ 컨설턴트 MD</span>
+            <span className="text-xs text-slate-500">프로젝트 관리 ▸ 혁신 컨설턴트 MD</span>
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight">{year}년 컨설턴트 MD 플래너</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{year}년 혁신 컨설턴트 MD</h1>
           <p className="text-sm text-slate-500 mt-1">
             컨설턴트 <strong className="text-slate-700">{consultants.length}명</strong> · 사업{" "}
             <strong className="text-slate-700">{plans.length}건</strong> · MD{" "}
@@ -689,6 +689,9 @@ function ConsultantGroup({
             seq={i + 1}
           />
         ))}
+      {expanded && plans.length > 0 && (
+        <ConsultantSumRow consultant={consultant} plans={plans} allDates={allDates} />
+      )}
       {expanded && plans.length === 0 && (
         <tr>
           <td colSpan={5} className="px-2 py-1 border-b border-slate-100 sticky left-0 bg-white">
@@ -700,6 +703,61 @@ function ConsultantGroup({
         </tr>
       )}
     </>
+  );
+}
+
+/** 컨설턴트별 합계 SUM 행 (엑셀의 합계 SUM 동일) */
+function ConsultantSumRow({
+  consultant,
+  plans,
+  allDates,
+}: {
+  consultant: User;
+  plans: Plan[];
+  allDates: Date[];
+}) {
+  // 일자별 합계 (그 컨설턴트의 plans 중 그 날짜에 배정된 것 = 0 또는 1)
+  const dateSet = new Set<string>();
+  for (const p of plans) for (const a of p.assignments) dateSet.add(a.date.slice(0, 10));
+
+  const totalRequired = plans.reduce((a, p) => a + p.requiredMD, 0);
+  const totalAssigned = plans.reduce((a, p) => a + p.assignments.length, 0);
+  const totalBudget = plans.reduce((a, p) => a + Number(p.consultingBudget), 0);
+
+  return (
+    <tr className="bg-amber-50/40 border-b-2 border-amber-200">
+      <td className="px-2 py-1 border-r border-slate-200 sticky left-0 bg-amber-50/40 z-10" />
+      <td className="px-2 py-1 border-r border-slate-200 sticky left-10 bg-amber-50/40 z-10 text-[10.5px] font-semibold text-slate-700">
+        합계 SUM
+      </td>
+      <td className="px-2 py-1 border-r border-slate-200 sticky left-[168px] bg-amber-50/40 z-10 text-right tabular-nums text-[10.5px] text-slate-700 font-semibold">
+        {fmtKRWShort(totalBudget)}
+      </td>
+      <td className="px-1 py-1 border-r border-slate-200 text-center tabular-nums text-[10.5px] font-semibold text-slate-700">
+        {totalRequired}
+      </td>
+      <td className="px-1 py-1 border-r border-slate-200 text-center tabular-nums text-[10.5px] font-semibold text-emerald-700">
+        {totalAssigned}
+      </td>
+      {allDates.map((d) => {
+        const dk = dateKey(d);
+        const we = isWeekend(d);
+        const has = dateSet.has(dk);
+        return (
+          <td
+            key={dk}
+            className={clsx(
+              "w-5 h-5 border-r border-slate-100 text-center align-middle p-0",
+              we ? "bg-slate-100/40" : "bg-amber-50/30"
+            )}
+          >
+            {has && (
+              <span className="text-[9px] font-bold text-amber-700 tabular-nums">1</span>
+            )}
+          </td>
+        );
+      })}
+    </tr>
   );
 }
 

@@ -265,7 +265,7 @@ export function DateRange({
 }
 
 /* ─────────── 드롭다운 (pill) — portal + 위/아래 자동감지 + 옵션 추가/재정렬/삭제 ─────────── */
-export function PillSelect<T extends { value: string; label: string; color?: string; id?: string }>({
+export function PillSelect<T extends { value: string; label: string; color?: string; id?: string; sortOrder?: number }>({
   value,
   options,
   onChange,
@@ -284,8 +284,8 @@ export function PillSelect<T extends { value: string; label: string; color?: str
   /** 카테고리 명시 시 '옵션 추가' 버튼 노출 (DropdownOption 테이블 저장) */
   addCategory?: string;
   onOptionAdded?: (created: { id: string; category: string; value: string; label: string; color: string | null; sortOrder: number }) => void;
-  /** 옵션에 id가 있으면 ▲▼ 재정렬 버튼 표시 (사용자 추가 옵션만) */
-  onOptionReorder?: (id: string, direction: "up" | "down") => void | Promise<void>;
+  /** 옵션에 id가 있으면 ▲▼ 재정렬 버튼 표시. 머지된 옵션 정렬 기준으로 sortOrder 계산해서 호출 */
+  onOptionReorder?: (id: string, newSortOrder: number) => void | Promise<void>;
   /** 옵션에 id가 있으면 ✕ 삭제 버튼 표시 */
   onOptionRemove?: (id: string) => void | Promise<void>;
 }) {
@@ -411,7 +411,14 @@ export function PillSelect<T extends { value: string; label: string; color?: str
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                onOptionReorder(o.id!, "up");
+                                const idx = options.findIndex((x) => x.value === o.value);
+                                if (idx <= 0) return;
+                                const prev = options[idx - 1];
+                                const prevPrev = idx >= 2 ? options[idx - 2] : null;
+                                const prevSo = prev.sortOrder ?? idx;
+                                const prevPrevSo = prevPrev?.sortOrder ?? prevSo - 2;
+                                const newSo = (prevSo + prevPrevSo) / 2;
+                                onOptionReorder(o.id!, newSo);
                               }}
                               className="p-0.5 rounded text-slate-400 hover:text-brand-600 hover:bg-white"
                               title="위로"
@@ -421,7 +428,14 @@ export function PillSelect<T extends { value: string; label: string; color?: str
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                onOptionReorder(o.id!, "down");
+                                const idx = options.findIndex((x) => x.value === o.value);
+                                if (idx === -1 || idx >= options.length - 1) return;
+                                const next = options[idx + 1];
+                                const nextNext = idx + 2 < options.length ? options[idx + 2] : null;
+                                const nextSo = next.sortOrder ?? idx + 2;
+                                const nextNextSo = nextNext?.sortOrder ?? nextSo + 2;
+                                const newSo = (nextSo + nextNextSo) / 2;
+                                onOptionReorder(o.id!, newSo);
                               }}
                               className="p-0.5 rounded text-slate-400 hover:text-brand-600 hover:bg-white"
                               title="아래로"

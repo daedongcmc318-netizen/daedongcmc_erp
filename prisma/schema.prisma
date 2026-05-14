@@ -228,13 +228,14 @@ model Project {
 // 드롭다운 옵션 (사용자 정의 추가 옵션)
 //   하드코딩 enum(BIZ_CATEGORY 등)은 그대로 두고, 이 테이블의 row는 추가 옵션으로 머지된다.
 //   category: bizCategory / projectStatus / serviceType / nurtureType / requestStatus / serviceDetail / region 등
+//   sortOrder는 Float로, 하드코딩 옵션 사이에 fractional value (예: 4.5)로 끼워넣을 수 있게.
 model DropdownOption {
   id        String   @id @default(cuid())
   category  String
   value     String
   label     String
-  color     String?  // tailwind class (옵션)
-  sortOrder Int      @default(0)
+  color     String?
+  sortOrder Float    @default(0)
   createdAt DateTime @default(now())
 
   @@unique([category, value])
