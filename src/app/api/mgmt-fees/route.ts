@@ -35,6 +35,7 @@ export async function POST(req: NextRequest) {
     data: {
       year,
       seq,
+      bizCategory: body.bizCategory ?? null,
       clientName,
       clientCompanyId: body.clientCompanyId ?? null,
       projectId: body.projectId ?? null,

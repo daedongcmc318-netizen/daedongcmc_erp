@@ -13,6 +13,7 @@ export const PROJECT_STATUS = [
 export const BIZ_CATEGORY = [
   { value: "innovation", label: "혁신바우처", color: "bg-blue-50 text-blue-700 ring-blue-200" },
   { value: "export", label: "수출바우처", color: "bg-cyan-50 text-cyan-700 ring-cyan-200" },
+  { value: "tp", label: "테크노파크", color: "bg-rose-50 text-rose-700 ring-rose-200" },
   { value: "contract", label: "용역", color: "bg-violet-50 text-violet-700 ring-violet-200" },
   { value: "certification", label: "인증", color: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
   { value: "rental", label: "임대", color: "bg-amber-50 text-amber-800 ring-amber-200" },

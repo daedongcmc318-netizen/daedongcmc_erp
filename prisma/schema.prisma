@@ -479,8 +479,10 @@ model MgmtFeeBudget {
   id                String   @id @default(cuid())
   year              Int
   seq               Int      // 연도별 일련번호 (1, 2, 3, ...)
+  bizCategory       String?  // innovation(혁신바우처) / export(수출바우처) / tp(테크노파크) / contract(용역) — 엑셀 '구분' 컬럼 prefix 기반 자동분류
   clientCompanyId   String?  // 클라이언트 거래처(없으면 freetext)
-  clientName        String   // 시트 기준 업체명 (제이오토26 등)
+  clientName        String   // 시트 기준 업체명 (제이오토 — 연도접미사 제거됨)
+  rawCode           String?  // 엑셀 '구분' 원본 (aaa01, C1 등 — 참고용)
   projectId         String?  // 연결된 프로젝트 (optional, (연도,업체) 자동매칭)
 
   // 예산

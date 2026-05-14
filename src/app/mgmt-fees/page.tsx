@@ -36,7 +36,7 @@ export default async function MgmtFeesPage({
       project: { select: { id: true, title: true, displayCode: true, year: true } },
       expenses: { include: { vendorCompany: { select: { id: true, name: true } } }, orderBy: { seq: "asc" } },
     },
-    orderBy: { seq: "asc" },
+    orderBy: [{ bizCategory: "asc" }, { seq: "asc" }],
   });
 
   const companies = await prisma.company.findMany({

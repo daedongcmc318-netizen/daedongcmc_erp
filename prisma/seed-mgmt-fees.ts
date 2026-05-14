@@ -74,9 +74,9 @@ function excelSerialToDate(raw: any): Date | null {
   return null;
 }
 
-/** 회사명 정규화 — ㈜/(주)/공백/_N 접미사 제거 */
-function normalizeName(name: string): string {
-  return name
+/** 회사명 정규화 — ㈜/(주)/공백/_N 접미사 + 연도 2자리 접미사 제거 */
+function normalizeName(name: string, year: number): string {
+  return stripYearSuffix(name, year)
     .replace(/_\d+\s*$/, "") // _1, _2, _10 접미사
     .replace(/\s+/g, "")
     .replace(/\([주㈜재]\)/g, "")
@@ -87,9 +87,47 @@ function normalizeName(name: string): string {
     .toLowerCase();
 }
 
-/** 업체명에서 _N 접미사만 제거 (표시용) */
+/** 업체명에서 _N 지출순번 접미사 제거 (표시용) */
 function stripSeqSuffix(name: string): string {
   return name.replace(/_\d+\s*$/, "").trim();
+}
+
+/**
+ * 업체명에서 연도 2자리 접미사 제거.
+ * 예: ("제이오토26", 2026) → "제이오토" / ("주식회사 네오실", 2022) → "주식회사 네오실"
+ *     ("ABC25", 2026) → "ABC25" (연도 불일치 → 그대로)
+ */
+function stripYearSuffix(name: string, year: number): string {
+  const yy = String(year).slice(-2); // 26, 25, ...
+  // _N 접미사 먼저 제거하고 끝에 yy가 붙어있는지 확인
+  const noSeq = name.replace(/_\d+\s*$/, "");
+  const re = new RegExp(`${yy}\\s*$`);
+  if (re.test(noSeq)) {
+    return noSeq.replace(re, "").trim();
+  }
+  return noSeq.trim();
+}
+
+/**
+ * '구분' 컬럼 prefix → bizCategory 매핑
+ *   a, aa, aaa, A, AA → innovation (혁신바우처)
+ *   b, bb, bbb, B → export (수출바우처)
+ *   C, c → tp (테크노파크)
+ *   D, d → contract (용역)
+ */
+function parseBizCategory(rawCode: string | null | undefined): string | null {
+  if (!rawCode) return null;
+  const c = rawCode.trim();
+  if (!c) return null;
+  // 앞 글자(들)만 보기 — 숫자 떼고 letter만
+  const letters = c.match(/^[a-zA-Z]+/)?.[0] ?? "";
+  if (!letters) return null;
+  const first = letters[0].toLowerCase();
+  if (first === "a") return "innovation";
+  if (first === "b") return "export";
+  if (first === "c") return "tp";
+  if (first === "d") return "contract";
+  return null;
 }
 
 /** 거래처명 정규화 (이름 매칭용, _N 접미사는 처리 X) */
@@ -131,7 +169,7 @@ async function main() {
   const allProjects = await prisma.project.findMany({ select: { id: true, year: true, companyId: true, title: true } });
 
   // 데이터 행을 (year, normalizedClient) 기준으로 그룹화
-  type Group = { year: number; clientRaw: string; clientNorm: string; rows: Row[] };
+  type Group = { year: number; clientRaw: string; clientNorm: string; rawCode: string | null; rows: Row[] };
   const groups = new Map<string, Group>();
   let dataRows = 0;
   for (let i = 1; i < rows.length; i++) {
@@ -142,10 +180,13 @@ async function main() {
     if (!year || !clientName) continue;
     dataRows++;
 
-    const norm = normalizeName(clientName);
+    const norm = normalizeName(clientName, year);
     const key = `${year}::${norm}`;
+    const rawCode = cleanStr(r[1]);
     if (!groups.has(key)) {
-      groups.set(key, { year, clientRaw: stripSeqSuffix(clientName), clientNorm: norm, rows: [] });
+      // 표시용 이름 = 연도접미사 + _N 둘 다 제거
+      const displayName = stripYearSuffix(stripSeqSuffix(clientName), year);
+      groups.set(key, { year, clientRaw: displayName, clientNorm: norm, rawCode, rows: [] });
     }
     groups.get(key)!.rows.push(r);
   }
@@ -174,6 +215,7 @@ async function main() {
   let vendorCreated = 0;
   let clientMatched = 0;
   let projectAutoLinked = 0;
+  const bizStats: Record<string, number> = {};
 
   for (const g of sortedGroups) {
     // 기존 사업이 이미 있으면 스킵 (이름+연도 매칭)
@@ -214,10 +256,16 @@ async function main() {
     const seq = (yearSeq.get(g.year) ?? 0) + 1;
     yearSeq.set(g.year, seq);
 
+    const bizCategory = parseBizCategory(g.rawCode);
+    const bizKey = bizCategory ?? "(없음)";
+    bizStats[bizKey] = (bizStats[bizKey] ?? 0) + 1;
+
     const newBudget = await prisma.mgmtFeeBudget.create({
       data: {
         year: g.year,
         seq,
+        bizCategory,
+        rawCode: g.rawCode,
         clientCompanyId: clientCompany?.id ?? null,
         clientName: g.clientRaw,
         projectId,
@@ -281,6 +329,7 @@ async function main() {
   console.log(`   매입처 자동생성:  ${vendorCreated}건`);
   console.log(`   클라이언트 매칭:  ${clientMatched}/${budgetCreated}`);
   console.log(`   프로젝트 자동연결: ${projectAutoLinked}/${budgetCreated}`);
+  console.log(`   사업영역 분포:    ${Object.entries(bizStats).map(([k, v]) => `${k}=${v}`).join(" / ")}`);
 
   const finalBudget = await prisma.mgmtFeeBudget.count();
   const finalExpense = await prisma.mgmtFeeExpense.count();

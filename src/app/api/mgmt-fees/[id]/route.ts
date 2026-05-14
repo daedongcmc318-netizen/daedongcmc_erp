@@ -10,6 +10,7 @@ const BIGINT_FIELDS = ["subsidy", "companyShare", "totalAmount", "mgmtFeeAmount"
 const FLOAT_FIELDS = ["mgmtFeeRate"];
 const ALLOWED = new Set([
   "year",
+  "bizCategory",
   "clientCompanyId",
   "clientName",
   "projectId",
