@@ -28,7 +28,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="ko">
       <body>
         <div className="flex min-h-screen">
-          <Sidebar />
+          <Sidebar role={user?.role ?? null} />
           <div className="flex flex-1 flex-col min-w-0">
             <Header user={user} />
             <main className="flex-1 overflow-x-hidden">{children}</main>

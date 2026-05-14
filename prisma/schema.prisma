@@ -86,6 +86,8 @@ model Company {
   clientProjects    Project[] @relation("ProjectClient")
   agencyProjects    Project[] @relation("ProjectAgency")
   taxInvoices       TaxInvoice[]
+  mgmtFeeBudgets    MgmtFeeBudget[]  @relation("MgmtFeeClient")
+  mgmtFeeExpenses   MgmtFeeExpense[] @relation("MgmtFeeVendor")
 }
 
 // 역할별 섹션 권한 매트릭스
@@ -205,6 +207,7 @@ model Project {
   deliverables  ProjectDeliverable[]
   taxInvoices   TaxInvoice[]
   expenses      ExpenseRequest[]
+  mgmtFeeBudgets MgmtFeeBudget[]
 
   @@index([status])
   @@index([bizCategory])
@@ -438,4 +441,65 @@ model LeaveRequest {
 
   @@index([userId])
   @@index([status])
+}
+
+// ─────────────────────────────── 업체별 관리비 (admin 전용) ───────────────────────────────
+// 한 사업 = 1 (연도 × 클라이언트 업체)
+// 각 사업당 여러 지출(MgmtFeeExpense) 보유. 지출은 매입 거래처(vendor)로 나감.
+model MgmtFeeBudget {
+  id                String   @id @default(cuid())
+  year              Int
+  seq               Int      // 연도별 일련번호 (1, 2, 3, ...)
+  clientCompanyId   String?  // 클라이언트 거래처(없으면 freetext)
+  clientName        String   // 시트 기준 업체명 (제이오토26 등)
+  projectId         String?  // 연결된 프로젝트 (optional, (연도,업체) 자동매칭)
+
+  // 예산
+  subsidy           BigInt   @default(0) // 정부보조금
+  companyShare      BigInt   @default(0) // 기업분담금
+  totalAmount       BigInt   @default(0) // 과제총액
+  mgmtFeeAmount     BigInt   @default(0) // 관리비
+  mgmtFeeRate       Float?               // 비율 (0.25 등)
+  payableTotal      BigInt   @default(0) // 지급총액 (집행 가능 한도)
+  overBudget        BigInt   @default(0) // 예산초과금
+  notes             String?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  clientCompany     Company? @relation("MgmtFeeClient", fields: [clientCompanyId], references: [id])
+  project           Project? @relation(fields: [projectId], references: [id])
+  expenses          MgmtFeeExpense[]
+
+  @@unique([year, seq])
+  @@index([year])
+  @@index([clientCompanyId])
+  @@index([projectId])
+}
+
+model MgmtFeeExpense {
+  id              String   @id @default(cuid())
+  budgetId        String
+  seq             Int      // 사업 내 지출 순번 (1, 2, 3, ...)
+
+  vendorCompanyId String?  // 매입 거래처 (자동 신규생성 가능)
+  vendorName      String   // 시트 기준 지불업체명 (담다 10%, 비트텍(재료비) 등)
+
+  taxInvoiceDate  DateTime? // 세금계산서 발행일
+  amount          BigInt   @default(0) // 지급액
+  runningBalance  BigInt?              // 잔금 (시트값 그대로, 참고용)
+  contractDone    Boolean  @default(false) // 계약서 작성
+  paymentDate     DateTime?            // 입금완료일
+  settlementDone  Boolean  @default(false) // 정산완료
+  filed           Boolean  @default(false) // 보관
+  notes           String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  budget          MgmtFeeBudget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  vendorCompany   Company?      @relation("MgmtFeeVendor", fields: [vendorCompanyId], references: [id])
+
+  @@index([budgetId])
+  @@index([vendorCompanyId])
 }
