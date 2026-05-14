@@ -151,7 +151,12 @@ export default function CertificateModal({
       alert("팝업이 차단되었습니다.");
       return;
     }
-    const html = printRef.current.innerHTML.replace(/__CERT_NO__/g, certNo);
+    // 인쇄 새 창에서 상대경로 이미지 깨짐 방지 → 절대 URL로 치환
+    const origin = window.location.origin;
+    const html = printRef.current.innerHTML
+      .replace(/__CERT_NO__/g, certNo)
+      .replace(/src="\/daedong-seal\.png"/g, `src="${origin}/daedong-seal.png"`)
+      .replace(/src='\/daedong-seal\.png'/g, `src='${origin}/daedong-seal.png'`);
     w.document.write(`<!doctype html>
 <html lang="ko">
 <head>
@@ -220,18 +225,11 @@ export default function CertificateModal({
   }
   .footer .stamp {
     display: inline-block;
-    width: 36px; height: 36px;
-    margin-left: 8px;
+    width: 60px; height: 60px;
+    margin-left: 4px;
+    margin-bottom: -16px;
     vertical-align: middle;
-    border: 1.5px solid #c0392b;
-    border-radius: 50%;
-    color: #c0392b;
-    font-size: 7px;
-    font-weight: 700;
-    line-height: 1.1;
-    padding: 5px 0;
-    text-align: center;
-    transform: rotate(-3deg);
+    object-fit: contain;
   }
   .footer .company {
     font-weight: 700;
@@ -246,7 +244,22 @@ export default function CertificateModal({
 </head>
 <body>
 ${html}
-<script>window.onload = function(){ setTimeout(function(){ window.print(); }, 250); };</script>
+<script>
+window.onload = function() {
+  var imgs = document.querySelectorAll('img');
+  var pending = imgs.length;
+  function ready() { setTimeout(function(){ window.print(); }, 200); }
+  if (pending === 0) { ready(); return; }
+  imgs.forEach(function(img){
+    if (img.complete && img.naturalWidth > 0) {
+      if (--pending === 0) ready();
+    } else {
+      img.addEventListener('load', function(){ if(--pending === 0) ready(); });
+      img.addEventListener('error', function(){ if(--pending === 0) ready(); });
+    }
+  });
+};
+</script>
 </body>
 </html>`);
     w.document.close();
@@ -381,27 +394,20 @@ ${html}
                   }}
                 >
                   대 표 이 사&nbsp;&nbsp;{CEO_NAME}
-                  <span
+                  <img
+                    src="/daedong-seal.png"
+                    alt="대동CMC 법인직인"
                     className="stamp"
                     style={{
                       display: "inline-block",
-                      width: 36,
-                      height: 36,
-                      marginLeft: 8,
+                      width: 60,
+                      height: 60,
+                      marginLeft: 4,
+                      marginBottom: -16,
                       verticalAlign: "middle",
-                      border: "1.5px solid #c0392b",
-                      borderRadius: "50%",
-                      color: "#c0392b",
-                      fontSize: 7,
-                      fontWeight: 700,
-                      lineHeight: 1.1,
-                      padding: "5px 0",
-                      textAlign: "center",
-                      transform: "rotate(-3deg)",
+                      objectFit: "contain",
                     }}
-                  >
-                    대표이사 인
-                  </span>
+                  />
                 </div>
                 <div
                   className="company"
