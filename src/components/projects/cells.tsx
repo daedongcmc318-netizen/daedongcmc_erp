@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import clsx from "clsx";
 import { Check, ChevronDown } from "lucide-react";
 
@@ -263,7 +264,7 @@ export function DateRange({
   );
 }
 
-/* ─────────── 드롭다운 (pill) ─────────── */
+/* ─────────── 드롭다운 (pill) — portal + 위/아래 자동감지 ─────────── */
 export function PillSelect<T extends { value: string; label: string }>({
   value,
   options,
@@ -278,46 +279,104 @@ export function PillSelect<T extends { value: string; label: string }>({
   placeholder?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number; placement: "down" | "up" }>({
+    top: 0,
+    left: 0,
+    width: 160,
+    placement: "down",
+  });
+  const btnRef = useRef<HTMLButtonElement | null>(null);
   const current = options.find((o) => o.value === value) ?? null;
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const recalc = () => {
+    const btn = btnRef.current;
+    if (!btn) return;
+    const r = btn.getBoundingClientRect();
+    const dropdownH = Math.min(256, options.length * 30 + 50); // 대략 추정
+    const spaceBelow = window.innerHeight - r.bottom;
+    const placement: "up" | "down" = spaceBelow < dropdownH + 20 && r.top > dropdownH + 20 ? "up" : "down";
+    const width = Math.max(140, r.width);
+    setPos({
+      top: placement === "down" ? r.bottom + 4 : r.top - 4,
+      left: r.left,
+      width,
+      placement,
+    });
+  };
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    recalc();
+    const onScroll = () => recalc();
+    const onResize = () => recalc();
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   return (
-    <div className="relative">
+    <>
       <button
+        ref={btnRef}
         onClick={() => setOpen(!open)}
         className="w-full text-left flex items-center min-h-[22px]"
         type="button"
       >
         {current ? renderPill(current) : <span className="text-slate-300 text-xs">{placeholder ?? "—"}</span>}
       </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
-          <div className="absolute z-30 mt-1 min-w-[120px] bg-white border border-slate-200 rounded-md shadow-lg py-1 max-h-64 overflow-auto">
-            {options.map((o) => (
-              <button
-                key={o.value}
-                onClick={() => {
-                  onChange(o.value);
-                  setOpen(false);
-                }}
-                className="w-full text-left px-2 py-1 hover:bg-slate-100 flex items-center gap-2"
-              >
-                {renderPill(o)}
-              </button>
-            ))}
-            <div className="border-t border-slate-100 mt-1 pt-1">
-              <button
-                onClick={() => {
-                  onChange("");
-                  setOpen(false);
-                }}
-                className="w-full text-left px-2 py-1 hover:bg-slate-50 text-xs text-slate-400"
-              >
-                지우기
-              </button>
+      {open && mounted &&
+        createPortal(
+          <>
+            <div
+              className="fixed inset-0 z-[9998]"
+              onClick={() => setOpen(false)}
+              onWheel={() => setOpen(false)}
+            />
+            <div
+              className="fixed z-[9999] min-w-[140px] bg-white border border-slate-200 rounded-md shadow-xl py-1 max-h-64 overflow-auto"
+              style={{
+                top: pos.top,
+                left: pos.left,
+                minWidth: pos.width,
+                transform: pos.placement === "up" ? "translateY(-100%)" : undefined,
+              }}
+            >
+              {options.map((o) => (
+                <button
+                  key={o.value}
+                  onClick={() => {
+                    onChange(o.value);
+                    setOpen(false);
+                  }}
+                  className="w-full text-left px-2 py-1 hover:bg-slate-100 flex items-center gap-2"
+                >
+                  {renderPill(o)}
+                </button>
+              ))}
+              <div className="border-t border-slate-100 mt-1 pt-1">
+                <button
+                  onClick={() => {
+                    onChange("");
+                    setOpen(false);
+                  }}
+                  className="w-full text-left px-2 py-1 hover:bg-slate-50 text-xs text-slate-400"
+                >
+                  지우기
+                </button>
+              </div>
             </div>
-          </div>
-        </>
-      )}
-    </div>
+          </>,
+          document.body
+        )}
+    </>
   );
 }

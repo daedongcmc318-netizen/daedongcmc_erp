@@ -325,65 +325,63 @@ export default function ProjectsClient({
 
   const cols = tab === "nurture" ? NURTURE_COLS : DISCOVERY_COLS;
 
-  async function patchProject(id: string, patch: Record<string, any>) {
-    try {
-      const res = await fetch(`/api/projects/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        let err: any = {};
-        try { err = JSON.parse(text); } catch {}
-        alert(`수정 실패 (${res.status}): ${err.error ?? err.detail ?? text.slice(0, 200) ?? "알 수 없는 오류"}`);
-        return;
+  function patchProject(id: string, patch: Record<string, any>) {
+    // 1) 낙관적 업데이트: 입력 즉시 화면 반영
+    const snapshot = projects;
+    setProjects((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, ...patch } : p))
+    );
+    // 2) 백그라운드 서버 저장 (router.refresh 호출 안 함 → 깜빡임/지연 제거)
+    (async () => {
+      try {
+        const res = await fetch(`/api/projects/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch),
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          let err: any = {};
+          try { err = JSON.parse(text); } catch {}
+          alert(`수정 실패 (${res.status}): ${err.error ?? err.detail ?? text.slice(0, 200) ?? "알 수 없는 오류"}`);
+          // 롤백
+          setProjects(snapshot);
+          return;
+        }
+        const updated = await res.json();
+        // 서버 응답으로 nested 관계 보강 (이름, 라벨 등) — 사용자 입력 흐름 끊지 않도록 router.refresh 생략
+        setProjects((prev) =>
+          prev.map((p) => {
+            if (p.id !== id) return p;
+            return {
+              ...p,
+              ...updated,
+              company: updated.company ?? p.company,
+              agency: updated.agency ?? p.agency,
+              manager: updated.manager ?? p.manager,
+              taxInvoices: updated.taxInvoices ?? p.taxInvoices,
+              deliverables: updated.deliverables ?? p.deliverables,
+            };
+          })
+        );
+      } catch (e: any) {
+        alert(`네트워크 오류: ${e.message}`);
+        setProjects(snapshot);
       }
-      const updated = await res.json();
-      setProjects((prev) =>
-        prev.map((p) => {
-          if (p.id !== id) return p;
-          // 안전한 머지: 응답에 없는 nested는 기존 값 유지
-          return {
-            ...p,
-            ...updated,
-            company: updated.company ?? p.company,
-            agency: updated.agency ?? p.agency,
-            manager: updated.manager ?? p.manager,
-            taxInvoices: updated.taxInvoices ?? p.taxInvoices,
-            deliverables: updated.deliverables ?? p.deliverables,
-          };
-        })
-      );
-      router.refresh();
-    } catch (e: any) {
-      alert(`네트워크 오류: ${e.message}`);
-    }
+    })();
   }
 
-  async function patchInvoice(invoiceId: string, projectId: string, patch: Record<string, any>) {
-    const res = await fetch(`/api/tax-invoices/${invoiceId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch),
-    });
-    if (!res.ok) return;
-    const updated = await res.json();
+  function patchInvoice(invoiceId: string, projectId: string, patch: Record<string, any>) {
+    // 낙관적 업데이트
     setProjects((prev) =>
       prev.map((p) =>
         p.id === projectId
-          ? { ...p, taxInvoices: p.taxInvoices.map((i) => (i.id === invoiceId ? { ...i, ...updated } : i)) }
+          ? { ...p, taxInvoices: p.taxInvoices.map((i) => (i.id === invoiceId ? { ...i, ...patch } : i)) }
           : p
       )
     );
-    router.refresh();
-  }
-
-  async function upsertDeliverable(projectId: string, seq: number, patch: Record<string, any>) {
-    const project = projects.find((p) => p.id === projectId);
-    const existing = project?.deliverables.find((d) => d.seq === seq);
-    if (existing) {
-      const res = await fetch(`/api/project-deliverables/${existing.id}`, {
+    (async () => {
+      const res = await fetch(`/api/tax-invoices/${invoiceId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(patch),
@@ -393,23 +391,55 @@ export default function ProjectsClient({
       setProjects((prev) =>
         prev.map((p) =>
           p.id === projectId
-            ? { ...p, deliverables: p.deliverables.map((d) => (d.id === existing.id ? { ...d, ...updated } : d)) }
+            ? { ...p, taxInvoices: p.taxInvoices.map((i) => (i.id === invoiceId ? { ...i, ...updated } : i)) }
             : p
         )
       );
-    } else {
-      const res = await fetch(`/api/project-deliverables`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, seq, ...patch }),
-      });
-      if (!res.ok) return;
-      const created = await res.json();
+    })();
+  }
+
+  function upsertDeliverable(projectId: string, seq: number, patch: Record<string, any>) {
+    const project = projects.find((p) => p.id === projectId);
+    const existing = project?.deliverables.find((d) => d.seq === seq);
+    if (existing) {
+      // 낙관적
       setProjects((prev) =>
-        prev.map((p) => (p.id === projectId ? { ...p, deliverables: [...p.deliverables, created] } : p))
+        prev.map((p) =>
+          p.id === projectId
+            ? { ...p, deliverables: p.deliverables.map((d) => (d.id === existing.id ? { ...d, ...patch } : d)) }
+            : p
+        )
       );
+      (async () => {
+        const res = await fetch(`/api/project-deliverables/${existing.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch),
+        });
+        if (!res.ok) return;
+        const updated = await res.json();
+        setProjects((prev) =>
+          prev.map((p) =>
+            p.id === projectId
+              ? { ...p, deliverables: p.deliverables.map((d) => (d.id === existing.id ? { ...d, ...updated } : d)) }
+              : p
+          )
+        );
+      })();
+    } else {
+      (async () => {
+        const res = await fetch(`/api/project-deliverables`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projectId, seq, ...patch }),
+        });
+        if (!res.ok) return;
+        const created = await res.json();
+        setProjects((prev) =>
+          prev.map((p) => (p.id === projectId ? { ...p, deliverables: [...p.deliverables, created] } : p))
+        );
+      })();
     }
-    router.refresh();
   }
 
   async function createInvoice(projectId: string, patch: Record<string, any>) {
@@ -712,10 +742,10 @@ export default function ProjectsClient({
                     <th
                       key={c}
                       className={clsx(
-                        "text-left px-2.5 py-2 border-b border-slate-200 font-medium whitespace-nowrap bg-slate-50",
+                        "text-left px-2.5 py-2 border-b-2 border-slate-300 border-r border-slate-200 font-medium whitespace-nowrap bg-slate-50",
                         COL_META[c].w,
                         isFrozen && "sticky",
-                        last && "border-r border-slate-200 shadow-[1px_0_0_rgba(0,0,0,0.04)]"
+                        last && "shadow-[1px_0_0_rgba(0,0,0,0.06)]"
                       )}
                       style={isFrozen ? { left: `${left}px`, zIndex: 20 } : undefined}
                     >
@@ -940,7 +970,7 @@ function ProjectRow({
   return (
     <tr
       className={clsx(
-        "group border-b border-slate-100 relative",
+        "group relative",
         isDragOver && "outline outline-2 outline-brand-300 outline-offset-[-2px]"
       )}
       onDragOver={onDragOver}
@@ -954,12 +984,12 @@ function ProjectRow({
           <td
             key={c}
             className={clsx(
-              "px-2.5 py-1.5 align-middle whitespace-nowrap overflow-hidden",
+              "px-2.5 py-1.5 align-middle whitespace-nowrap overflow-hidden border-b border-r border-slate-200",
               COL_META[c].w,
               isFrozen
                 ? "sticky bg-white group-hover:bg-slate-50"
                 : "group-hover:bg-slate-50",
-              last && "border-r border-slate-200 shadow-[1px_0_0_rgba(0,0,0,0.04)]"
+              last && "shadow-[1px_0_0_rgba(0,0,0,0.06)]"
             )}
             style={isFrozen ? { left: `${left}px`, zIndex: 5 } : undefined}
           >
