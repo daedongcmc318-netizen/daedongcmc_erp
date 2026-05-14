@@ -1051,7 +1051,12 @@ function ProjectRow({
               COL_META[c].w,
               isFrozen
                 ? "sticky bg-white group-hover:bg-slate-50"
-                : "group-hover:bg-slate-50",
+                : "group-hover:brightness-95",
+              // 중간/완료 보고일자: 미완료면 파스텔, 완료(체크)면 연회색
+              c === "midReportDate" &&
+                (project.midReportYn ? "bg-slate-100" : "bg-amber-50"),
+              c === "finalReportDate" &&
+                (project.finalReportYn ? "bg-slate-100" : "bg-rose-50"),
               last && "shadow-[1px_0_0_rgba(0,0,0,0.06)]"
             )}
             style={isFrozen ? { left: `${left}px`, zIndex: 5 } : undefined}

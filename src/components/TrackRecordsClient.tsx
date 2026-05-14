@@ -1,7 +1,7 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Award, Search, X, Plus, Trash2, ChevronDown, Sparkles, Globe, Link as LinkIcon } from "lucide-react";
+import { Award, Search, X, Plus, Trash2, ChevronDown, Sparkles, Globe, Link as LinkIcon, FileSpreadsheet, Loader2, AlertTriangle, Check } from "lucide-react";
 import clsx from "clsx";
 
 type TrackRecord = {
@@ -28,6 +28,31 @@ type TrackRecord = {
   region: string | null;
   notes: string | null;
   clientCompany: { id: string; name: string } | null;
+  electronicTaxInvoiceId: string | null;
+  electronicTaxInvoice: {
+    id: string;
+    approvalNo: string;
+    writeDate: string;
+    supplierName: string;
+    buyerName: string;
+    totalAmount: string;
+    itemName: string | null;
+  } | null;
+};
+
+type InvoiceSearchResult = {
+  id: string;
+  type: string;
+  approvalNo: string;
+  writeDate: string;
+  issueDate: string | null;
+  supplierName: string;
+  supplierBizNo: string;
+  buyerName: string;
+  buyerBizNo: string;
+  totalAmount: string;
+  supplyAmount: string;
+  itemName: string | null;
 };
 
 function fmtKRW(v: string | number | null): string {
@@ -76,6 +101,7 @@ export default function TrackRecordsClient({
   const [filterYear, setFilterYear] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterProgram, setFilterProgram] = useState("");
+  const [pickerFor, setPickerFor] = useState<string | null>(null);
 
   const tabRecords = useMemo(() => records.filter((r) => r.type === tab), [records, tab]);
 
@@ -125,6 +151,20 @@ export default function TrackRecordsClient({
     if (!res.ok) {
       alert("수정 실패");
       router.refresh();
+      return;
+    }
+    const updated = await res.json();
+    setRecords((prev) => prev.map((r) => (r.id === id ? updated : r)));
+  }
+
+  async function linkInvoice(id: string, invoiceId: string | null) {
+    const res = await fetch(`/api/track-records/${id}/link-invoice`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ electronicTaxInvoiceId: invoiceId }),
+    });
+    if (!res.ok) {
+      alert("연결 실패");
       return;
     }
     const updated = await res.json();
@@ -201,7 +241,7 @@ export default function TrackRecordsClient({
             className="h-7 pl-7 pr-3 rounded text-xs bg-slate-100 focus:bg-white focus:ring-2 focus:ring-brand-200 focus:outline-none w-56"
           />
         </div>
-        {tab === "innovation" && (
+        {tab === "export" && (
           <>
             <FilterSelect value={filterYear} onChange={setFilterYear} label="연도" options={usedYears.map((y) => ({ value: String(y), label: `${y}년` }))} />
             <FilterSelect value={filterProgram} onChange={setFilterProgram} label="지원사업" options={usedPrograms.map((p) => ({ value: p, label: p }))} />
@@ -230,12 +270,40 @@ export default function TrackRecordsClient({
       <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
         <div className="overflow-auto max-h-[calc(100vh-280px)]">
           {tab === "innovation" ? (
-            <InnovationTable records={filtered} onPatch={patchRecord} onDelete={deleteRecord} />
+            <InnovationTable
+              records={filtered}
+              onPatch={patchRecord}
+              onDelete={deleteRecord}
+              onPickInvoice={(id) => setPickerFor(id)}
+              onUnlinkInvoice={(id) => linkInvoice(id, null)}
+            />
           ) : (
-            <ExportTable records={filtered} onPatch={patchRecord} onDelete={deleteRecord} />
+            <ExportTable
+              records={filtered}
+              onPatch={patchRecord}
+              onDelete={deleteRecord}
+              onPickInvoice={(id) => setPickerFor(id)}
+              onUnlinkInvoice={(id) => linkInvoice(id, null)}
+            />
           )}
         </div>
       </div>
+
+      {/* 세금계산서 매칭 picker */}
+      {pickerFor && (() => {
+        const target = records.find((r) => r.id === pickerFor);
+        if (!target) return null;
+        return (
+          <InvoicePickerModal
+            record={target}
+            onClose={() => setPickerFor(null)}
+            onSelect={async (invoiceId) => {
+              await linkInvoice(target.id, invoiceId);
+              setPickerFor(null);
+            }}
+          />
+        );
+      })()}
     </div>
   );
 }
@@ -308,14 +376,18 @@ function FilterSelect({
 }
 
 /* ─────────── 혁신 테이블 ─────────── */
-function InnovationTable({
+function ExportTable({
   records,
   onPatch,
   onDelete,
+  onPickInvoice,
+  onUnlinkInvoice,
 }: {
   records: TrackRecord[];
   onPatch: (id: string, patch: any) => void;
   onDelete: (id: string) => void;
+  onPickInvoice: (id: string) => void;
+  onUnlinkInvoice: (id: string) => void;
 }) {
   return (
     <table className="text-[11.5px] w-full table-auto">
@@ -335,13 +407,14 @@ function InnovationTable({
           <Th className="w-20">진행상태</Th>
           <Th className="w-20">국가</Th>
           <Th className="w-24">지역</Th>
+          <Th className="w-32">세금계산서</Th>
           <Th className="w-10"></Th>
         </tr>
       </thead>
       <tbody>
         {records.length === 0 ? (
           <tr>
-            <td colSpan={15} className="text-center py-12 text-sm text-slate-400">
+            <td colSpan={16} className="text-center py-12 text-sm text-slate-400">
               표시할 실적이 없습니다
             </td>
           </tr>
@@ -428,6 +501,9 @@ function InnovationTable({
                 />
               </Td>
               <Td>
+                <InvoiceBadge record={r} onPick={() => onPickInvoice(r.id)} onUnlink={() => onUnlinkInvoice(r.id)} />
+              </Td>
+              <Td>
                 <button
                   onClick={() => onDelete(r.id)}
                   className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-rose-500 p-1"
@@ -445,14 +521,18 @@ function InnovationTable({
 }
 
 /* ─────────── 수출 테이블 ─────────── */
-function ExportTable({
+function InnovationTable({
   records,
   onPatch,
   onDelete,
+  onPickInvoice,
+  onUnlinkInvoice,
 }: {
   records: TrackRecord[];
   onPatch: (id: string, patch: any) => void;
   onDelete: (id: string) => void;
+  onPickInvoice: (id: string) => void;
+  onUnlinkInvoice: (id: string) => void;
 }) {
   return (
     <table className="text-[11.5px] w-full table-auto">
@@ -467,13 +547,14 @@ function ExportTable({
           <Th className="w-48">수요기업명</Th>
           <Th className="w-24">처리일자</Th>
           <Th className="w-24">진행상태</Th>
+          <Th className="w-32">세금계산서</Th>
           <Th className="w-10"></Th>
         </tr>
       </thead>
       <tbody>
         {records.length === 0 ? (
           <tr>
-            <td colSpan={10} className="text-center py-12 text-sm text-slate-400">
+            <td colSpan={11} className="text-center py-12 text-sm text-slate-400">
               표시할 실적이 없습니다
             </td>
           </tr>
@@ -522,6 +603,9 @@ function ExportTable({
               </Td>
               <Td>
                 <StatusBadge value={r.status} onSave={(v) => onPatch(r.id, { status: v })} />
+              </Td>
+              <Td>
+                <InvoiceBadge record={r} onPick={() => onPickInvoice(r.id)} onUnlink={() => onUnlinkInvoice(r.id)} />
               </Td>
               <Td>
                 <button
@@ -709,5 +793,250 @@ function StatusBadge({ value, onSave }: { value: string | null; onSave: (v: stri
       }}
       className="h-6 px-1.5 text-[11px] border border-brand-300 rounded outline-none ring-2 ring-brand-200 bg-white w-20"
     />
+  );
+}
+
+/* ─────────── 세금계산서 매칭 배지 + picker ─────────── */
+
+function InvoiceBadge({
+  record,
+  onPick,
+  onUnlink,
+}: {
+  record: TrackRecord;
+  onPick: () => void;
+  onUnlink: () => void;
+}) {
+  const inv = record.electronicTaxInvoice;
+  if (inv) {
+    return (
+      <div className="flex items-center gap-1 group/inv">
+        <button
+          onClick={onPick}
+          className="flex-1 text-left text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-medium hover:bg-emerald-200 truncate flex items-center gap-1"
+          title={`${inv.approvalNo} · ${inv.writeDate.slice(0, 10)} · ${inv.supplierName} → ${inv.buyerName} · ₩${Number(inv.totalAmount).toLocaleString()}`}
+        >
+          <FileSpreadsheet className="w-2.5 h-2.5 shrink-0" />
+          <span className="truncate">{inv.writeDate.slice(0, 10).replace(/-/g, "")}</span>
+        </button>
+        <button
+          onClick={onUnlink}
+          className="opacity-0 group-hover/inv:opacity-100 text-slate-300 hover:text-rose-500"
+          title="연결 해제"
+        >
+          <X className="w-3 h-3" />
+        </button>
+      </div>
+    );
+  }
+  return (
+    <button
+      onClick={onPick}
+      className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 hover:bg-amber-100 text-slate-500 hover:text-amber-700 font-medium flex items-center gap-1"
+    >
+      <AlertTriangle className="w-2.5 h-2.5" /> 미연결
+    </button>
+  );
+}
+
+function InvoicePickerModal({
+  record,
+  onClose,
+  onSelect,
+}: {
+  record: TrackRecord;
+  onClose: () => void;
+  onSelect: (invoiceId: string | null) => void | Promise<void>;
+}) {
+  const [q, setQ] = useState(record.clientCompany?.name ?? record.clientName ?? "");
+  const [useAmount, setUseAmount] = useState(true);
+  const [useDate, setUseDate] = useState(true);
+  const [items, setItems] = useState<InvoiceSearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const amount = String(record.processedAmount ?? record.serviceFee ?? "0");
+  const refDate = record.processedDate ?? record.endDate ?? record.startDate;
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    const t = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const params = new URLSearchParams();
+        if (q.trim()) params.set("q", q.trim());
+        if (useAmount && Number(amount) > 0) params.set("amount", amount);
+        if (useDate && refDate) params.set("date", refDate);
+        params.set("limit", "30");
+        const res = await fetch(`/api/electronic-tax-invoices/search?${params.toString()}`, {
+          signal: ctrl.signal,
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setItems(data);
+        }
+      } catch {
+        // ignore aborts
+      } finally {
+        setLoading(false);
+      }
+    }, 200);
+    return () => {
+      ctrl.abort();
+      clearTimeout(t);
+    };
+  }, [q, useAmount, useDate, amount, refDate]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[80vh] flex flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* 헤더 */}
+        <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <FileSpreadsheet className="w-4 h-4 text-brand-500" />
+              <h2 className="text-sm font-semibold truncate">세금계산서 연결 — {record.serviceName}</h2>
+            </div>
+            <div className="text-[11px] text-slate-500 mt-0.5">
+              실적 정보: {record.clientName} · ₩{Number(amount).toLocaleString()} ·{" "}
+              {refDate ? refDate.slice(0, 10) : "—"}
+            </div>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 p-1">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* 검색 + 필터 */}
+        <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/50 space-y-2">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+            <input
+              autoFocus
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="기업명/사업자번호/승인번호/품목 검색..."
+              className="w-full h-8 pl-8 pr-3 text-[12px] border border-slate-200 rounded outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-200 bg-white"
+            />
+          </div>
+          <div className="flex items-center gap-3 text-[11px]">
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={useAmount}
+                onChange={(e) => setUseAmount(e.target.checked)}
+                className="rounded border-slate-300 text-brand-600"
+              />
+              <span className="text-slate-600">금액 ±2% 일치</span>
+            </label>
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={useDate}
+                onChange={(e) => setUseDate(e.target.checked)}
+                className="rounded border-slate-300 text-brand-600"
+              />
+              <span className="text-slate-600">처리일자 근접도 정렬</span>
+            </label>
+            {record.electronicTaxInvoiceId && (
+              <button
+                onClick={() => onSelect(null)}
+                className="ml-auto text-rose-600 hover:text-rose-700 font-medium"
+              >
+                연결 해제
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* 결과 */}
+        <div className="flex-1 overflow-auto">
+          {loading ? (
+            <div className="text-center py-12 text-[12px] text-slate-400">
+              <Loader2 className="w-4 h-4 animate-spin inline mr-1" /> 검색 중...
+            </div>
+          ) : items.length === 0 ? (
+            <div className="text-center py-12 text-[12px] text-slate-400">결과 없음</div>
+          ) : (
+            <table className="w-full text-[11.5px]">
+              <thead className="bg-slate-50 sticky top-0">
+                <tr className="text-slate-500 text-[10.5px]">
+                  <Th className="w-20">구분</Th>
+                  <Th className="w-24">작성일</Th>
+                  <Th>공급자 → 공급받는자</Th>
+                  <Th className="w-32">금액</Th>
+                  <Th className="w-32">승인번호</Th>
+                  <Th className="w-16"></Th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((it) => {
+                  const isSelected = it.id === record.electronicTaxInvoiceId;
+                  return (
+                    <tr
+                      key={it.id}
+                      className={clsx(
+                        "border-b border-slate-100 hover:bg-slate-50/60 cursor-pointer",
+                        isSelected && "bg-emerald-50"
+                      )}
+                      onClick={() => onSelect(it.id)}
+                    >
+                      <Td>
+                        <span
+                          className={clsx(
+                            "text-[10px] px-1.5 py-0.5 rounded font-medium",
+                            it.type === "sales"
+                              ? "bg-blue-100 text-blue-800"
+                              : "bg-orange-100 text-orange-800"
+                          )}
+                        >
+                          {it.type === "sales" ? "매출" : "매입"}
+                        </span>
+                      </Td>
+                      <Td className="tabular-nums text-slate-600">{it.writeDate.slice(0, 10)}</Td>
+                      <Td>
+                        <div className="text-[11px] truncate text-slate-700">
+                          {it.supplierName}
+                          <span className="text-slate-400 mx-1">→</span>
+                          {it.buyerName}
+                        </div>
+                        {it.itemName && (
+                          <div className="text-[9.5px] text-slate-400 truncate">{it.itemName}</div>
+                        )}
+                      </Td>
+                      <Td className="tabular-nums text-right font-medium text-slate-800">
+                        ₩{Number(it.totalAmount).toLocaleString()}
+                      </Td>
+                      <Td className="font-mono text-[10px] text-slate-500">{it.approvalNo}</Td>
+                      <Td>
+                        {isSelected ? (
+                          <Check className="w-4 h-4 text-emerald-600" />
+                        ) : (
+                          <Plus className="w-3 h-3 text-slate-300" />
+                        )}
+                      </Td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <div className="px-5 py-2 border-t border-slate-100 bg-slate-50/40 flex justify-end">
+          <button
+            onClick={onClose}
+            className="h-7 px-3 text-[11px] text-slate-600 hover:text-slate-800 font-medium"
+          >
+            닫기
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

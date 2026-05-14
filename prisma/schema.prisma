@@ -380,6 +380,8 @@ model ElectronicTaxInvoice {
   sourceFile       String?  // 원본 파일명 (감사용)
   createdAt        DateTime @default(now())
 
+  trackRecords     TrackRecord[] @relation("TrackRecordTaxInvoice")
+
   @@index([type])
   @@index([writeDate])
   @@index([type, writeDate])
@@ -576,7 +578,7 @@ model TrackRecord {
   seqNo           Int?     // 엑셀 '번호' 컬럼 (1, 2, 3, ...)
   serviceName     String   // 서비스명
   serviceFee      BigInt   @default(0) // 서비스이용금액 / 서비스요금
-  processedAmount BigInt?              // 처리금액 (혁신만)
+  processedAmount BigInt?              // 처리금액 (수출 18컬럼 데이터)
   feeType         String?              // 요금형태 (건별협의 등)
   startDate       DateTime?
   endDate         DateTime?
@@ -585,7 +587,7 @@ model TrackRecord {
   clientName      String   // 수요기업명 / 참여기업
   processedDate   DateTime? // 처리일자
   status          String?  // 진행상태 (대금지급/입금완료 등)
-  // 혁신 전용
+  // 수출(18컬럼) 전용
   supportProgram  String?  // 지원사업명 (중기부 수출바우처_내수기업 등)
   year            Int?     // 사업 연도
   round           Int?     // 차수
@@ -595,14 +597,18 @@ model TrackRecord {
   country         String?
   region          String?
   notes           String?
+  // 세금계산서 매칭
+  electronicTaxInvoiceId String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  clientCompany   Company? @relation("TrackRecordClient", fields: [clientCompanyId], references: [id])
+  clientCompany        Company?              @relation("TrackRecordClient", fields: [clientCompanyId], references: [id])
+  electronicTaxInvoice ElectronicTaxInvoice? @relation("TrackRecordTaxInvoice", fields: [electronicTaxInvoiceId], references: [id])
 
   @@index([type])
   @@index([clientCompanyId])
   @@index([year])
   @@index([processedDate])
   @@index([status])
+  @@index([electronicTaxInvoiceId])
 }

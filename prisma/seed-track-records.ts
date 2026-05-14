@@ -1,11 +1,13 @@
 /*
  * 실적 관리: 혁신/수출 서비스 수행이력 import
  *
+ * NOTE: 파일명 라벨과 실제 데이터 내용이 반대로 들어있어 type 매핑을 교차해서 적용.
+ *
  * 파일:
- *   - 수출 서비스수행이력_20260514143330.xlsx  → type=export (9컬럼)
+ *   - 수출 서비스수행이력_20260514143330.xlsx (9컬럼) → 실제 내용은 혁신 → type=innovation
  *     0:번호 1:서비스명 2:서비스이용금액 3:요금형태 4:시작일 5:종료일 6:수요기업명 7:처리일자 8:진행상태
  *
- *   - 혁신 수행중인 서비스_20260514.xlsx  → type=innovation (18컬럼)
+ *   - 혁신 수행중인 서비스_20260514.xlsx (18컬럼) → 실제 내용은 수출(지원사업명에 '수출바우처' 포함) → type=export
  *     0:번호 1:서비스명 2:서비스요금 3:처리금액 4:요금형태 5:시작일 6:종료일 7:지원사업명
  *     8:연도 9:차수 10:사업기간시작일 11:사업기간종료일 12:사업자번호변경여부 13:참여기업
  *     14:처리일자 15:진행상태 16:국가 17:지역
@@ -123,7 +125,7 @@ async function main() {
 
     await prisma.trackRecord.create({
       data: {
-        type: "export",
+        type: "innovation", // 9컬럼 파일은 실제로 혁신 데이터
         seqNo,
         serviceName: serviceName ?? "(미지정)",
         serviceFee: cleanNum(r[2]),
@@ -163,7 +165,7 @@ async function main() {
 
     await prisma.trackRecord.create({
       data: {
-        type: "innovation",
+        type: "export", // 18컬럼 파일은 실제로 수출 데이터 (지원사업명에 '수출바우처' 포함)
         seqNo,
         serviceName: serviceName ?? "(미지정)",
         serviceFee: cleanNum(r[2]),
