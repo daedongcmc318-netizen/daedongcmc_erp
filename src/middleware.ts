@@ -6,11 +6,12 @@ const PUBLIC_PATHS = ["/login", "/api/auth/login"];
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // 정적 자원, _next, public 자원은 통과
+  // 정적 자원, _next, public 자원, PWA manifest는 통과
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||
-    pathname.match(/\.(png|jpg|jpeg|svg|css|js|woff2?|ico)$/)
+    pathname === "/manifest.json" ||
+    pathname.match(/\.(png|jpg|jpeg|svg|css|js|woff2?|ico|webmanifest|json)$/)
   ) {
     return NextResponse.next();
   }

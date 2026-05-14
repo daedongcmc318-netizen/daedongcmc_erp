@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { getOfficeLocation, haversineMeters } from "@/lib/geo";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "내부직원만 근태 체크가 가능합니다." }, { status: 403 });
   }
 
-  const { action, notes } = await req.json();
+  const body = await req.json();
+  const { action, notes, lat, lng, accuracy } = body;
   const today = dateOnly(new Date());
   const now = new Date();
   const ip = getIp(req);
@@ -36,18 +38,42 @@ export async function POST(req: NextRequest) {
     where: { userId_date: { userId: me.id, date: today } },
   });
 
+  // GPS 검증 (lat/lng가 있을 때만, admin은 검증 우회 옵션 없음 - 모두 GPS 필요)
+  let distance: number | null = null;
+  if ((action === "check_in" || action === "check_out") && lat != null && lng != null) {
+    const office = await getOfficeLocation();
+    if (office) {
+      distance = haversineMeters(Number(lat), Number(lng), office.lat, office.lng);
+      // admin이 아닌 경우 반경 초과 시 차단
+      if (me.role !== "admin" && distance > office.radiusM) {
+        return NextResponse.json(
+          {
+            error: `사무실에서 너무 멉니다. 현재 ${Math.round(distance)}m (허용 반경 ${office.radiusM}m)`,
+            distance,
+            officeRadius: office.radiusM,
+          },
+          { status: 403 }
+        );
+      }
+    }
+  }
+
   if (action === "check_in") {
     if (existing?.checkIn) {
       return NextResponse.json({ error: "이미 출근 기록되어 있습니다.", attendance: existing }, { status: 400 });
     }
+    const data: any = {
+      checkIn: now,
+      checkInIp: ip,
+      checkInLat: lat != null ? Number(lat) : null,
+      checkInLng: lng != null ? Number(lng) : null,
+      checkInDistance: distance,
+      status: "working",
+      notes: notes ?? existing?.notes ?? null,
+    };
     const att = existing
-      ? await prisma.attendance.update({
-          where: { id: existing.id },
-          data: { checkIn: now, checkInIp: ip, status: "working", notes: notes ?? existing.notes },
-        })
-      : await prisma.attendance.create({
-          data: { userId: me.id, date: today, checkIn: now, checkInIp: ip, status: "working", notes: notes ?? null },
-        });
+      ? await prisma.attendance.update({ where: { id: existing.id }, data })
+      : await prisma.attendance.create({ data: { userId: me.id, date: today, ...data } });
     revalidatePath("/attendance");
     revalidatePath("/");
     return NextResponse.json(att);
@@ -62,7 +88,14 @@ export async function POST(req: NextRequest) {
     }
     const att = await prisma.attendance.update({
       where: { id: existing.id },
-      data: { checkOut: now, checkOutIp: ip, notes: notes ?? existing.notes },
+      data: {
+        checkOut: now,
+        checkOutIp: ip,
+        checkOutLat: lat != null ? Number(lat) : null,
+        checkOutLng: lng != null ? Number(lng) : null,
+        checkOutDistance: distance,
+        notes: notes ?? existing.notes,
+      },
     });
     revalidatePath("/attendance");
     revalidatePath("/");
@@ -71,7 +104,7 @@ export async function POST(req: NextRequest) {
 
   // 출장/근무 등 상태 토글 (오늘 기록 새로 생성하거나 갱신)
   if (action === "set_status") {
-    const newStatus = String((await req.clone().json()).status ?? "working");
+    const newStatus = String(body.status ?? "working");
     const VALID = new Set(["working", "business_trip", "off"]);
     if (!VALID.has(newStatus)) {
       return NextResponse.json({ error: "허용되지 않는 상태" }, { status: 400 });

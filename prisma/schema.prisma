@@ -465,17 +465,36 @@ model Attendance {
   date            DateTime @db.Date
   checkIn         DateTime?
   checkOut        DateTime?
-  status          String   @default("working") // working / off / leave / half_am / half_pm / absent / holiday
+  status          String   @default("working") // working / off / leave / half_am / half_pm / absent / holiday / business_trip
   checkInLocation String?
   checkInIp       String?
   checkOutIp      String?
+  // GPS 좌표 (모바일 PWA 출퇴근)
+  checkInLat      Float?
+  checkInLng      Float?
+  checkInDistance Float?  // 사무실에서 m
+  checkOutLat     Float?
+  checkOutLng     Float?
+  checkOutDistance Float?
   notes           String?
+  // 관리자 수정 흔적
+  editedById      String?
+  editedAt        DateTime?
   createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, date])
   @@index([date])
+}
+
+// 앱 전역 설정 (사무실 좌표 등)
+model AppSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String   // JSON 문자열
+  updatedAt DateTime @updatedAt
 }
 
 model LeaveRequest {

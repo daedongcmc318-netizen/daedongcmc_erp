@@ -81,7 +81,14 @@ const NAV: { group: string; items: NavItem[] }[] = [
     items: [
       { href: "/users", label: "직원 관리", icon: Users },
       { href: "/contracts", label: "전자근로계약", icon: FileSignature },
-      { href: "/attendance", label: "근태", icon: Clock },
+      {
+        href: "/attendance",
+        label: "근태관리",
+        icon: Clock,
+        children: [
+          { href: "/attendance/monthly", label: "근태현황", icon: CalendarDays },
+        ],
+      },
     ],
   },
   {

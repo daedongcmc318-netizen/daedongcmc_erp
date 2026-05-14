@@ -1,0 +1,14 @@
+{
+  "name": "대동CMC 근태",
+  "short_name": "대동근태",
+  "description": "대동CMC 근태관리 — GPS 기반 출퇴근 체크",
+  "start_url": "/m/attendance",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#3f63f5",
+  "icons": [
+    { "src": "/daedong-logo.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/daedong-logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
