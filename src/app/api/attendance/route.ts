@@ -69,6 +69,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(att);
   }
 
+  // 출장/근무 등 상태 토글 (오늘 기록 새로 생성하거나 갱신)
+  if (action === "set_status") {
+    const newStatus = String((await req.clone().json()).status ?? "working");
+    const VALID = new Set(["working", "business_trip", "off"]);
+    if (!VALID.has(newStatus)) {
+      return NextResponse.json({ error: "허용되지 않는 상태" }, { status: 400 });
+    }
+    const att = existing
+      ? await prisma.attendance.update({
+          where: { id: existing.id },
+          data: { status: newStatus, notes: notes ?? existing.notes },
+        })
+      : await prisma.attendance.create({
+          data: { userId: me.id, date: today, status: newStatus, notes: notes ?? null },
+        });
+    revalidatePath("/attendance");
+    revalidatePath("/");
+    return NextResponse.json(att);
+  }
+
   return NextResponse.json({ error: "알 수 없는 action" }, { status: 400 });
 }
 
