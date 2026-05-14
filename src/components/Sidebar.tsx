@@ -20,6 +20,7 @@ import {
   ClipboardCheck,
   ChevronRight,
   Wallet,
+  Award,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -55,6 +56,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
       },
       { href: "/invoices", label: "세금계산서", icon: FileSpreadsheet },
       { href: "/card-purchases", label: "카드매입", icon: CreditCard },
+      { href: "/track-records", label: "실적 관리", icon: Award },
     ],
   },
   {
