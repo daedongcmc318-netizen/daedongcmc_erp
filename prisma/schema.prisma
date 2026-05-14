@@ -211,11 +211,27 @@ model Project {
   taxInvoices   TaxInvoice[]
   expenses      ExpenseRequest[]
   mgmtFeeBudgets MgmtFeeBudget[]
+  histories     ProjectHistory[]
 
   @@index([status])
   @@index([bizCategory])
   @@index([pmCode])
   @@index([year])
+}
+
+// 프로젝트 특이사항/히스토리 메모 (제목 옆 서류 아이콘으로 표시)
+model ProjectHistory {
+  id          String   @id @default(cuid())
+  projectId   String
+  body        String
+  createdById String?
+  createdByName String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
 }
 
 model ProjectDeliverable {

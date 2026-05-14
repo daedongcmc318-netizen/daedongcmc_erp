@@ -8,7 +8,7 @@ import {
   NURTURE_TYPE,
   REQUEST_STATUS,
 } from "@/lib/enums";
-import { Plus, X, Search, Trash2, ChevronDown, GripVertical, History, Download, UserCheck, Printer, FileSpreadsheet } from "lucide-react";
+import { Plus, X, Search, Trash2, ChevronDown, GripVertical, History, Download, UserCheck, Printer, FileSpreadsheet, FileText } from "lucide-react";
 import clsx from "clsx";
 import {
   InlineText,
@@ -20,6 +20,7 @@ import {
   PillSelect,
 } from "@/components/projects/cells";
 import ProjectHistoryModal from "@/components/ProjectHistoryModal";
+import ProjectNotesModal from "@/components/ProjectNotesModal";
 
 type CompanyContact = { id?: string; name: string; phone?: string | null; email?: string | null };
 type Deliverable = {
@@ -86,6 +87,7 @@ type Project = {
   manager: { id: string; name: string } | null;
   taxInvoices: TaxInvoice[];
   deliverables: Deliverable[];
+  historyCount?: number; // 히스토리 메모 개수 (서류 아이콘 표시용)
 };
 
 type Company = { id: string; name: string; type: string };
@@ -109,7 +111,6 @@ const DISCOVERY_COLS = [
   "confirmedYn",
   "confirmedRevenue",
   "nurtureType",
-  "notes",
   "delete",
 ] as const;
 
@@ -146,18 +147,28 @@ const NURTURE_COLS = [
   "invPaymentDoneYn",
   "invPaymentDate",
   "invAmount",
-  "contactName",
-  "contactPhone",
-  "contactEmail",
-  "keyword",
-  "notes",
   "deliverableAgg",
   "deliverable1",
   "deliverable2",
   "deliverable3",
   "remarks",
+  "contactName",
+  "contactPhone",
+  "contactEmail",
   "delete",
 ] as const;
+
+// 담당자 대시보드(?manager=xxx)에서 숨기는 invoice 관련 컬럼
+const MANAGER_HIDDEN_COLS = new Set<string>([
+  "invDescription",
+  "invIssuedYn",
+  "invIssueDate",
+  "invVatReceivedYn",
+  "invSettlementDoneYn",
+  "invPaymentDoneYn",
+  "invPaymentDate",
+  "invAmount",
+]);
 
 // 왼쪽 고정(sticky) 열: 가로 스크롤 시에도 업체 행 식별 가능
 const FROZEN_NURTURE = ["drag", "year", "displayCode", "title"] as const;
@@ -250,6 +261,7 @@ export default function ProjectsClient({
 }) {
   const router = useRouter();
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [notesProjectId, setNotesProjectId] = useState<string | null>(null);
   const [projects, setProjects] = useState<Project[]>(initialProjects);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -323,7 +335,11 @@ export default function ProjectsClient({
     discovery: projects.filter((p) => p.source === "discovery").length,
   };
 
-  const cols = tab === "nurture" ? NURTURE_COLS : DISCOVERY_COLS;
+  // 담당자 대시보드(?manager=xxx)에서는 invoice 관련 컬럼 숨김
+  const baseCols = tab === "nurture" ? NURTURE_COLS : DISCOVERY_COLS;
+  const cols = selectedManager
+    ? (baseCols as readonly string[]).filter((c) => !MANAGER_HIDDEN_COLS.has(c))
+    : (baseCols as readonly string[]);
 
   function patchProject(id: string, patch: Record<string, any>) {
     // 1) 낙관적 업데이트: 입력 즉시 화면 반영
@@ -788,6 +804,7 @@ export default function ProjectsClient({
                   }}
                   onDrop={() => reorderRows(p.id)}
                   onInsertAfter={() => addProject(p.id)}
+                  onOpenNotes={() => setNotesProjectId(p.id)}
                 />
               ))}
               {filtered.length === 0 && (
@@ -853,6 +870,25 @@ export default function ProjectsClient({
       {historyOpen && (
         <ProjectHistoryModal onClose={() => setHistoryOpen(false)} />
       )}
+
+      {/* 프로젝트 히스토리(특이사항) 메모 팝업 */}
+      {notesProjectId && (() => {
+        const target = projects.find((p) => p.id === notesProjectId);
+        if (!target) return null;
+        return (
+          <ProjectNotesModal
+            projectId={target.id}
+            projectTitle={target.title}
+            initialCount={target.historyCount ?? 0}
+            onClose={() => setNotesProjectId(null)}
+            onCountChange={(count) => {
+              setProjects((prev) =>
+                prev.map((p) => (p.id === target.id ? { ...p, historyCount: count } : p))
+              );
+            }}
+          />
+        );
+      })()}
     </div>
   );
 }
@@ -941,6 +977,7 @@ function ProjectRow({
   onDragOver,
   onDrop,
   onInsertAfter,
+  onOpenNotes,
 }: {
   project: Project;
   cols: readonly string[];
@@ -958,6 +995,7 @@ function ProjectRow({
   onDragOver: (e: React.DragEvent) => void;
   onDrop: () => void;
   onInsertAfter: () => void;
+  onOpenNotes: () => void;
 }) {
   const inv = project.taxInvoices[0] ?? null;
   const contact = project.company?.contacts?.[0] ?? null;
@@ -993,7 +1031,7 @@ function ProjectRow({
             )}
             style={isFrozen ? { left: `${left}px`, zIndex: 5 } : undefined}
           >
-            {renderCell(c, project, inv, contact, users, onPatch, invUpdate, onUpsertDeliverable, onDelete, onDragStart, onInsertAfter, isSelected, onToggleSelect)}
+            {renderCell(c, project, inv, contact, users, onPatch, invUpdate, onUpsertDeliverable, onDelete, onDragStart, onInsertAfter, isSelected, onToggleSelect, onOpenNotes)}
           </td>
         );
       })}
@@ -1014,7 +1052,8 @@ function renderCell(
   onDragStart: () => void,
   onInsertAfter: () => void,
   isSelected: boolean,
-  onToggleSelect: () => void
+  onToggleSelect: () => void,
+  onOpenNotes: () => void
 ) {
   const getDeliverable = (seq: number) => p.deliverables.find((d) => d.seq === seq) ?? null;
   switch (c) {
@@ -1062,14 +1101,35 @@ function renderCell(
           placeholder="—"
         />
       );
-    case "title":
+    case "title": {
+      const hasHistory = (p.historyCount ?? 0) > 0;
       return (
-        <InlineText
-          value={p.title}
-          onSave={(v) => onPatch({ title: v })}
-          className="font-medium text-slate-800"
-        />
+        <div className="flex items-center gap-1 min-w-0">
+          <div className="flex-1 min-w-0">
+            <InlineText
+              value={p.title}
+              onSave={(v) => onPatch({ title: v })}
+              className="font-medium text-slate-800"
+            />
+          </div>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenNotes();
+            }}
+            className={clsx(
+              "shrink-0 p-1 rounded transition",
+              hasHistory
+                ? "text-amber-600 hover:bg-amber-50 hover:text-amber-700"
+                : "text-slate-300 hover:bg-slate-100 hover:text-slate-500 opacity-0 group-hover:opacity-100"
+            )}
+            title={hasHistory ? `히스토리 ${p.historyCount}건` : "히스토리 추가"}
+          >
+            <FileText className="w-3.5 h-3.5" />
+          </button>
+        </div>
       );
+    }
     case "bizCategory":
       return (
         <PillSelect

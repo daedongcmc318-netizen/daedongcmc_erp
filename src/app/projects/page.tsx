@@ -35,6 +35,7 @@ export default async function ProjectsPage({
         manager: true,
         taxInvoices: { orderBy: { createdAt: "asc" } },
         deliverables: { orderBy: { seq: "asc" } },
+        _count: { select: { histories: true } },
       },
       orderBy: [{ source: "asc" }, { sortOrder: "asc" }],
     }),
@@ -53,9 +54,15 @@ export default async function ProjectsPage({
 
   const years = allYears.map((y) => y.year).filter((y) => y > 2000);
 
+  // _count.histories → historyCount 평탄화
+  const projectsWithCount = projects.map((p: any) => ({
+    ...p,
+    historyCount: p._count?.histories ?? 0,
+  }));
+
   return (
     <ProjectsClient
-      initialProjects={projects.map(serializeProject) as any}
+      initialProjects={projectsWithCount.map(serializeProject) as any}
       companies={companies as any}
       users={users as any}
       currentYear={year}
