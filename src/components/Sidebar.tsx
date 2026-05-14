@@ -70,7 +70,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
         icon: Receipt,
         children: [
           { href: "/expenses", label: "지출결의서", icon: Receipt },
-          { href: "/expense-trips", label: "출장보고서", icon: Briefcase },
+          { href: "/expense-trips", label: "출장신청서", icon: Briefcase },
           { href: "/leaves", label: "휴가신청서", icon: CalendarDays },
         ],
       },

@@ -438,7 +438,14 @@ model ExpenseRequest {
   rejectReason    String?
   receiptUrl      String?
   paymentMethod   String?  // card / cash / transfer
-  attachmentNote  String?  // 첨부설명/메모
+  attachmentNote  String?
+  // 지출결의 필수 첨부 4종 (이미지/PDF URL)
+  taxInvoiceImageUrl  String?  // 세금계산서
+  businessRegUrl      String?  // 사업자등록증
+  bankAccountUrl      String?  // 통장사본
+  quotationUrl        String?  // 거래명세서/견적서
+  // 결재라인
+  approvalRoute   String   @default("internal") // internal / external
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

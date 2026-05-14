@@ -135,6 +135,7 @@ export default function ConsultantMDClient({
   const [plans, setPlans] = useState<Plan[]>(initialPlans);
   const [showPlanForm, setShowPlanForm] = useState(false);
   const [showGradeHelp, setShowGradeHelp] = useState(false);
+  const [planDetailId, setPlanDetailId] = useState<string | null>(null);
 
   // 전체 기간 + 가용 MD 기간
   const [rangeStart, setRangeStart] = useState(DEFAULT_RANGE_START);
@@ -419,7 +420,127 @@ export default function ConsultantMDClient({
             stats={consultantStats}
             onToggleCell={toggleCell}
             onDeletePlan={deletePlan}
+            onPlanClick={(id) => setPlanDetailId(id)}
           />
+        </div>
+      </div>
+
+      {/* 사업 배정 날짜 상세 모달 */}
+      {planDetailId && (() => {
+        const target = plans.find((p) => p.id === planDetailId);
+        if (!target) return null;
+        const consultant = consultants.find((c) => c.id === target.managerId) ?? null;
+        return (
+          <PlanDetailModal
+            plan={target}
+            consultant={consultant}
+            onClose={() => setPlanDetailId(null)}
+          />
+        );
+      })()}
+    </div>
+  );
+}
+
+/* ─────────── 사업별 배정 날짜 상세 모달 ─────────── */
+
+function PlanDetailModal({
+  plan,
+  consultant,
+  onClose,
+}: {
+  plan: Plan;
+  consultant: User | null;
+  onClose: () => void;
+}) {
+  const dates = plan.assignments
+    .map((a) => a.date.slice(0, 10))
+    .sort();
+  const remaining = Math.max(0, plan.requiredMD - dates.length);
+
+  // 월별로 그룹화
+  const byMonth = new Map<string, string[]>();
+  for (const d of dates) {
+    const m = d.slice(0, 7);
+    if (!byMonth.has(m)) byMonth.set(m, []);
+    byMonth.get(m)!.push(d);
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 mb-0.5">
+              <CalendarDays className="w-4 h-4 text-brand-500" />
+              <h2 className="text-sm font-semibold truncate">{plan.title}</h2>
+            </div>
+            <div className="text-[11px] text-slate-500">
+              {consultant && (
+                <>
+                  <strong>{consultant.name}</strong> {consultant.consultantGrade} · {fmtKRW(consultant.consultantRate)}/일 ·
+                </>
+              )}
+              {" "}서비스금액 {fmtKRW(plan.consultingBudget)} · 필요 {plan.requiredMD}MD / 배정 {dates.length}MD
+              {remaining > 0 && <span className="text-rose-600 font-medium ml-1">(잔여 {remaining})</span>}
+            </div>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-auto px-5 py-4">
+          {dates.length === 0 ? (
+            <div className="text-center py-12 text-[12px] text-slate-400">아직 배정된 날짜가 없습니다</div>
+          ) : (
+            <div className="space-y-3">
+              {Array.from(byMonth.entries()).map(([month, dList]) => (
+                <div key={month}>
+                  <div className="text-[11px] font-semibold text-slate-600 mb-1.5">
+                    {month.replace("-", "년 ")}월 — {dList.length}일
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {dList.map((d) => {
+                      const dt = new Date(d + "T00:00:00");
+                      const dow = "일월화수목금토"[dt.getDay()];
+                      const dayNum = dt.getDate();
+                      const we = dt.getDay() === 0 || dt.getDay() === 6;
+                      return (
+                        <span
+                          key={d}
+                          className={clsx(
+                            "px-2 py-1 rounded text-[11px] font-medium tabular-nums border",
+                            we
+                              ? "bg-slate-100 text-slate-500 border-slate-200"
+                              : "bg-brand-100 text-brand-700 border-brand-200"
+                          )}
+                          title={d}
+                        >
+                          {dayNum}일 ({dow})
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 py-2 border-t border-slate-100 bg-slate-50/40 flex justify-end">
+          <button
+            onClick={onClose}
+            className="h-7 px-3 text-[11px] text-slate-600 hover:text-slate-800 font-medium"
+          >
+            닫기
+          </button>
         </div>
       </div>
     </div>
@@ -437,6 +558,8 @@ function ConsultantSummary({
   stats: Map<string, { md: number; cost: number }>;
   availableMD: number;
 }) {
+  const [expanded, setExpanded] = useState(true);
+
   if (consultants.length === 0) {
     return (
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-3 text-sm text-amber-800 flex items-center gap-2">
@@ -445,19 +568,54 @@ function ConsultantSummary({
       </div>
     );
   }
+
+  // 좌우 반반 분할 (등급순 정렬되어 있음)
+  const mid = Math.ceil(consultants.length / 2);
+  const left = consultants.slice(0, mid);
+  const right = consultants.slice(mid);
+
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-3 mb-3 shadow-sm overflow-x-auto">
-      <table className="w-full text-[11.5px]">
+    <div className="bg-white border border-slate-200 rounded-xl mb-3 shadow-sm overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-50 text-left transition border-b border-slate-100"
+      >
+        {expanded ? <ChevronDown className="w-3.5 h-3.5 text-slate-500" /> : <ChevronRight className="w-3.5 h-3.5 text-slate-500" />}
+        <span className="text-sm font-semibold text-slate-700">컨설턴트별 가용·배정 현황</span>
+        <span className="text-[11px] text-slate-500">({consultants.length}명 · 가용 {availableMD}일)</span>
+        <span className="ml-auto text-[10px] text-slate-400">{expanded ? "접기" : "펼치기"}</span>
+      </button>
+      {expanded && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 divide-x divide-slate-100">
+          <SummaryHalf consultants={left} stats={stats} availableMD={availableMD} />
+          <SummaryHalf consultants={right} stats={stats} availableMD={availableMD} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SummaryHalf({
+  consultants,
+  stats,
+  availableMD,
+}: {
+  consultants: User[];
+  stats: Map<string, { md: number; cost: number }>;
+  availableMD: number;
+}) {
+  return (
+    <div className="p-2 overflow-x-auto">
+      <table className="w-full text-[11px]">
         <thead>
-          <tr className="text-slate-500 text-[10.5px] border-b border-slate-200">
-            <th className="text-left px-2 py-1.5">컨설턴트</th>
-            <th className="text-left px-2 py-1.5 w-14">등급</th>
-            <th className="text-right px-2 py-1.5 w-24">일단가</th>
-            <th className="text-right px-2 py-1.5 w-24">배정 MD</th>
-            <th className="text-right px-2 py-1.5 w-20">가용 MD</th>
-            <th className="text-right px-2 py-1.5 w-28">배정 비용</th>
-            <th className="text-right px-2 py-1.5 w-32">신청 가능 비용</th>
-            <th className="px-2 py-1.5 w-28">진행도</th>
+          <tr className="text-slate-500 text-[10px] border-b border-slate-200">
+            <th className="text-left px-1.5 py-1 w-14">이름</th>
+            <th className="text-left px-1 py-1 w-10">등급</th>
+            <th className="text-right px-1.5 py-1 w-20">일단가</th>
+            <th className="text-right px-1.5 py-1 w-16">배정MD</th>
+            <th className="text-right px-1.5 py-1 w-12">가용</th>
+            <th className="text-right px-1.5 py-1 w-24">신청가능비용</th>
+            <th className="px-1.5 py-1 w-20">진행</th>
           </tr>
         </thead>
         <tbody>
@@ -469,23 +627,21 @@ function ConsultantSummary({
             const pct = availableMD > 0 ? Math.min(100, (stat.md / availableMD) * 100) : 0;
             return (
               <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50/40">
-                <td className="px-2 py-1.5 font-medium text-slate-800">{c.name}</td>
-                <td className="px-2 py-1.5">
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-brand-100 text-brand-700 font-mono font-medium">
+                <td className="px-1.5 py-1 font-medium text-slate-800 truncate">{c.name}</td>
+                <td className="px-1 py-1">
+                  <span className="text-[9px] px-1 py-0.5 rounded bg-brand-100 text-brand-700 font-mono font-medium">
                     {c.consultantGrade}
                   </span>
                 </td>
-                <td className="px-2 py-1.5 text-right tabular-nums text-slate-600">{fmtKRW(rate)}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums">
+                <td className="px-1.5 py-1 text-right tabular-nums text-slate-600">{fmtKRWShort(rate)}</td>
+                <td className="px-1.5 py-1 text-right tabular-nums">
                   <strong className="text-emerald-600">{stat.md}</strong>
-                  <span className="text-slate-400"> / {availableMD}</span>
                 </td>
-                <td className="px-2 py-1.5 text-right tabular-nums text-slate-700">{remaining}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums text-slate-700">{fmtKRW(stat.cost)}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums text-brand-700 font-semibold">
-                  {fmtKRW(remainingBudget)}
+                <td className="px-1.5 py-1 text-right tabular-nums text-slate-700">{remaining}</td>
+                <td className="px-1.5 py-1 text-right tabular-nums text-brand-700 font-semibold">
+                  {fmtKRWShort(remainingBudget)}
                 </td>
-                <td className="px-2 py-1.5">
+                <td className="px-1.5 py-1">
                   <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
                     <div
                       className={clsx("h-full transition-all", pct >= 100 ? "bg-rose-500" : "bg-brand-500")}
@@ -514,6 +670,7 @@ function UnifiedGrid({
   stats,
   onToggleCell,
   onDeletePlan,
+  onPlanClick,
 }: {
   consultants: User[];
   plansByConsultant: Map<string, Plan[]>;
@@ -524,6 +681,7 @@ function UnifiedGrid({
   stats: Map<string, { md: number; cost: number }>;
   onToggleCell: (planId: string, consultantId: string, date: Date) => void;
   onDeletePlan: (id: string) => void;
+  onPlanClick: (planId: string) => void;
 }) {
   return (
     <table className="text-[10.5px] border-collapse">
@@ -564,12 +722,12 @@ function UnifiedGrid({
               <th
                 key={dateKey(d)}
                 className={clsx(
-                  "w-5 text-center px-0 py-0.5 border-b border-r border-slate-200 font-medium tabular-nums",
+                  "w-9 text-center px-0 py-1 border-b border-r border-slate-200 font-medium tabular-nums",
                   we ? "bg-slate-200/60 text-slate-400" : "text-slate-600"
                 )}
               >
-                <div className="text-[9px] leading-tight">{d.getDate()}</div>
-                <div className={clsx("text-[7px] leading-none", we ? "text-rose-400" : "text-slate-400")}>
+                <div className="text-[10.5px] leading-tight">{d.getDate()}</div>
+                <div className={clsx("text-[8.5px] leading-none mt-0.5", we ? "text-rose-400" : "text-slate-400")}>
                   {dow}
                 </div>
               </th>
@@ -591,6 +749,7 @@ function UnifiedGrid({
               cellMap={cellMap}
               onToggleCell={onToggleCell}
               onDeletePlan={onDeletePlan}
+              onPlanClick={onPlanClick}
             />
           );
         })}
@@ -613,6 +772,7 @@ function UnifiedGrid({
                 cellMap={cellMap}
                 onToggleCell={onToggleCell}
                 onDeletePlan={onDeletePlan}
+                onPlanClick={onPlanClick}
                 indent={false}
               />
             ))}
@@ -631,6 +791,7 @@ function ConsultantGroup({
   cellMap,
   onToggleCell,
   onDeletePlan,
+  onPlanClick,
 }: {
   consultant: User;
   plans: Plan[];
@@ -639,6 +800,7 @@ function ConsultantGroup({
   cellMap: Map<string, { planId: string; assignmentId: string }>;
   onToggleCell: (planId: string, consultantId: string, date: Date) => void;
   onDeletePlan: (id: string) => void;
+  onPlanClick: (planId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
   const totalRequired = plans.reduce((a, p) => a + p.requiredMD, 0);
@@ -685,6 +847,7 @@ function ConsultantGroup({
             cellMap={cellMap}
             onToggleCell={onToggleCell}
             onDeletePlan={onDeletePlan}
+            onPlanClick={onPlanClick}
             indent
             seq={i + 1}
           />
@@ -747,7 +910,7 @@ function ConsultantSumRow({
           <td
             key={dk}
             className={clsx(
-              "w-5 h-5 border-r border-slate-100 text-center align-middle p-0",
+              "w-9 h-7 border-r border-slate-100 text-center align-middle p-0",
               we ? "bg-slate-100/40" : "bg-amber-50/30"
             )}
           >
@@ -768,6 +931,7 @@ function PlanRow({
   cellMap,
   onToggleCell,
   onDeletePlan,
+  onPlanClick,
   indent,
   seq,
 }: {
@@ -777,6 +941,7 @@ function PlanRow({
   cellMap: Map<string, { planId: string; assignmentId: string }>;
   onToggleCell: (planId: string, consultantId: string, date: Date) => void;
   onDeletePlan: (id: string) => void;
+  onPlanClick: (planId: string) => void;
   indent: boolean;
   seq?: number;
 }) {
@@ -793,7 +958,13 @@ function PlanRow({
         )}
       >
         <div className="flex items-center gap-1">
-          <span className="text-[11px] text-slate-800 truncate" title={plan.title}>{plan.title}</span>
+          <button
+            onClick={() => onPlanClick(plan.id)}
+            className="text-[11px] text-slate-800 truncate hover:text-brand-700 hover:underline text-left"
+            title={`${plan.title} — 클릭하여 배정 날짜 보기`}
+          >
+            {plan.title}
+          </button>
           <button
             onClick={() => onDeletePlan(plan.id)}
             className="opacity-0 group-hover/row:opacity-100 text-slate-300 hover:text-rose-500"
@@ -829,7 +1000,7 @@ function PlanRow({
           <td
             key={dk}
             className={clsx(
-              "w-5 h-5 border-r border-slate-100 text-center align-middle p-0",
+              "w-9 h-7 border-r border-slate-100 text-center align-middle p-0",
               we ? "bg-slate-100/40" : "bg-white",
               !we && consultantId && "hover:bg-brand-50 cursor-pointer",
               !consultantId && "cursor-not-allowed bg-slate-50"
@@ -848,7 +1019,7 @@ function PlanRow({
             }
           >
             {isAssigned && (
-              <div className="mx-auto w-3.5 h-3.5 bg-brand-500 text-white text-[9px] font-bold rounded-sm flex items-center justify-center leading-none">
+              <div className="mx-auto w-6 h-5 bg-brand-500 text-white text-[10px] font-bold rounded flex items-center justify-center leading-none">
                 1
               </div>
             )}

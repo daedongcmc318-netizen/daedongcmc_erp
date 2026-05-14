@@ -77,9 +77,9 @@ export default function TripReportsClient({
         <div>
           <div className="flex items-center gap-2 mb-1">
             <Briefcase className="w-4 h-4 text-brand-500" />
-            <span className="text-xs text-slate-500">전자결재 ▸ 출장보고서</span>
+            <span className="text-xs text-slate-500">전자결재 ▸ 출장신청서</span>
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight">출장보고서</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">출장신청서</h1>
           <p className="text-sm text-slate-500 mt-1">{me.name} · 총 {reports.length}건</p>
         </div>
         <button
@@ -94,7 +94,7 @@ export default function TripReportsClient({
 
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
         {reports.length === 0 ? (
-          <div className="py-16 text-center text-sm text-slate-400">작성한 출장보고서가 없습니다</div>
+          <div className="py-16 text-center text-sm text-slate-400">작성한 출장신청서가 없습니다</div>
         ) : (
           <table className="w-full text-[12px]">
             <thead className="bg-slate-50 text-slate-500 text-[11px]">
@@ -190,50 +190,61 @@ function TripForm({
   return (
     <div className="bg-white border border-brand-200 rounded-xl p-5 mb-5 shadow-sm">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold">출장보고서 작성</h3>
+        <h3 className="text-sm font-semibold">출장신청서 작성</h3>
         <button onClick={onCancel} className="text-slate-400 hover:text-slate-700">
           <X className="w-4 h-4" />
         </button>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div className="md:col-span-2">
-          <label className="text-[10px] text-slate-400">제목</label>
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="예: 2026 부산 출장"
-            autoFocus
-            className="w-full h-8 px-2 text-[12px] border border-slate-200 rounded outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-200"
-          />
-        </div>
+
+      <div className="text-[12px] text-slate-600 mb-3">아래와 같이 출장을 신청하오니 결재하여 주시기 바랍니다.</div>
+
+      {/* 출장신청서 표 (엑셀 양식 동일) */}
+      <table className="w-full border-collapse border border-slate-300 mb-4">
+        <tbody className="text-[12px]">
+          <tr>
+            <td className="w-28 px-3 py-2 bg-slate-100 border border-slate-300 text-center font-semibold text-slate-700">출 장 자</td>
+            <td className="px-3 py-2 border border-slate-300">
+              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="출장자명 또는 출장팀" autoFocus className="w-full h-7 px-2 text-[12px] border border-slate-200 rounded outline-none focus:border-brand-300" />
+            </td>
+          </tr>
+          <tr>
+            <td className="px-3 py-2 bg-slate-100 border border-slate-300 text-center font-semibold text-slate-700">출 장 기 간</td>
+            <td className="px-3 py-2 border border-slate-300">
+              <div className="flex items-center gap-2">
+                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-7 px-2 text-[12px] border border-slate-200 rounded outline-none focus:border-brand-300" />
+                <span className="text-slate-400">~</span>
+                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-7 px-2 text-[12px] border border-slate-200 rounded outline-none focus:border-brand-300" />
+                {totalDays != null && totalDays > 0 && (
+                  <span className="text-[11px] text-slate-500">({totalDays}일)</span>
+                )}
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td className="px-3 py-2 bg-slate-100 border border-slate-300 text-center font-semibold text-slate-700">출 장 지</td>
+            <td className="px-3 py-2 border border-slate-300">
+              <input value={destination} onChange={(e) => setDestination(e.target.value)} placeholder="부산 / 서울 / 해외 등" className="w-full h-7 px-2 text-[12px] border border-slate-200 rounded outline-none focus:border-brand-300" />
+            </td>
+          </tr>
+          <tr>
+            <td className="px-3 py-2 bg-slate-100 border border-slate-300 text-center font-semibold text-slate-700">출 장 목 적</td>
+            <td className="px-3 py-2 border border-slate-300">
+              <textarea value={purpose} onChange={(e) => setPurpose(e.target.value)} rows={2} placeholder="현장 점검 / 회의 참석 등" className="w-full px-2 py-1 text-[12px] border border-slate-200 rounded outline-none focus:border-brand-300 resize-none" />
+            </td>
+          </tr>
+          <tr>
+            <td className="px-3 py-2 bg-slate-100 border border-slate-300 text-center font-semibold text-slate-700">기 타</td>
+            <td className="px-3 py-2 border border-slate-300">
+              <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={2} placeholder="기타 사항 (예상 비용/동행자/특이사항 등)" className="w-full px-2 py-1 text-[12px] border border-slate-200 rounded outline-none focus:border-brand-300 resize-none" />
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      {/* 결재라인 + 비용 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
         <div>
-          <label className="text-[10px] text-slate-400">출장지</label>
-          <input
-            value={destination}
-            onChange={(e) => setDestination(e.target.value)}
-            placeholder="부산 / 서울 / 해외 등"
-            className="w-full h-8 px-2 text-[12px] border border-slate-200 rounded outline-none focus:border-brand-300"
-          />
-        </div>
-        <div>
-          <label className="text-[10px] text-slate-400">출장 목적</label>
-          <input
-            value={purpose}
-            onChange={(e) => setPurpose(e.target.value)}
-            placeholder="현장 점검 / 회의 참석 등"
-            className="w-full h-8 px-2 text-[12px] border border-slate-200 rounded outline-none focus:border-brand-300"
-          />
-        </div>
-        <div>
-          <label className="text-[10px] text-slate-400">시작일</label>
-          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full h-8 px-2 text-[12px] border border-slate-200 rounded outline-none focus:border-brand-300" />
-        </div>
-        <div>
-          <label className="text-[10px] text-slate-400">종료일</label>
-          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full h-8 px-2 text-[12px] border border-slate-200 rounded outline-none focus:border-brand-300" />
-        </div>
-        <div>
-          <label className="text-[10px] text-slate-400">총 비용 (원)</label>
+          <label className="text-[10px] text-slate-400">예상 비용 (원)</label>
           <input
             inputMode="numeric"
             value={totalCost}
@@ -254,14 +265,6 @@ function TripForm({
               <span>외부 (2단계)</span>
             </label>
           </div>
-        </div>
-        <div className="md:col-span-2">
-          <label className="text-[10px] text-slate-400">출장 내용</label>
-          <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={3} className="w-full px-2 py-1.5 text-[12px] border border-slate-200 rounded outline-none focus:border-brand-300 resize-none" />
-        </div>
-        <div className="md:col-span-2">
-          <label className="text-[10px] text-slate-400">출장 결과</label>
-          <textarea value={result} onChange={(e) => setResult(e.target.value)} rows={3} className="w-full px-2 py-1.5 text-[12px] border border-slate-200 rounded outline-none focus:border-brand-300 resize-none" />
         </div>
       </div>
       <div className="flex justify-end gap-2 mt-4">

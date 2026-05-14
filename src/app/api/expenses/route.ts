@@ -58,6 +58,11 @@ export async function POST(req: NextRequest) {
       paymentMethod: body.paymentMethod ?? null,
       attachmentNote: body.attachmentNote ?? null,
       receiptUrl: body.receiptUrl ?? null,
+      taxInvoiceImageUrl: body.taxInvoiceImageUrl ?? null,
+      businessRegUrl: body.businessRegUrl ?? null,
+      bankAccountUrl: body.bankAccountUrl ?? null,
+      quotationUrl: body.quotationUrl ?? null,
+      approvalRoute: body.approvalRoute === "external" ? "external" : "internal",
     },
     include: {
       requester: { select: { id: true, name: true, pmCode: true } },

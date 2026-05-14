@@ -24,6 +24,12 @@ type Expense = {
   requester: { id: string; name: string; pmCode: string | null } | null;
   approver: { id: string; name: string; pmCode: string | null } | null;
   project: { id: string; title: string; displayCode: string | null; year: number } | null;
+  // 결재 첨부 4종
+  taxInvoiceImageUrl?: string | null;
+  businessRegUrl?: string | null;
+  bankAccountUrl?: string | null;
+  quotationUrl?: string | null;
+  approvalRoute?: string;
   createdAt: string;
 };
 
@@ -316,6 +322,11 @@ function ExpenseFormModal({
       amount: 0,
       requestDate: new Date().toISOString().slice(0, 10),
       paymentMethod: "card",
+      approvalRoute: "internal",
+      taxInvoiceImageUrl: null,
+      businessRegUrl: null,
+      bankAccountUrl: null,
+      quotationUrl: null,
     }
   );
   const [saving, setSaving] = useState(false);
@@ -586,6 +597,45 @@ function ExpenseFormModal({
             />
           </Field>
 
+          {/* 첨부 4종 (세금계산서/사업자등록증/통장사본/거래명세서) */}
+          <Field label="첨부 서류 (이미지 또는 PDF)">
+            <div className="grid grid-cols-2 gap-3 mt-1">
+              <AttachmentInput
+                label="세금계산서"
+                value={draft.taxInvoiceImageUrl ?? null}
+                onChange={(url) => set("taxInvoiceImageUrl" as any, url as any)}
+              />
+              <AttachmentInput
+                label="사업자등록증"
+                value={draft.businessRegUrl ?? null}
+                onChange={(url) => set("businessRegUrl" as any, url as any)}
+              />
+              <AttachmentInput
+                label="통장사본"
+                value={draft.bankAccountUrl ?? null}
+                onChange={(url) => set("bankAccountUrl" as any, url as any)}
+              />
+              <AttachmentInput
+                label="거래명세서 (견적서)"
+                value={draft.quotationUrl ?? null}
+                onChange={(url) => set("quotationUrl" as any, url as any)}
+              />
+            </div>
+          </Field>
+
+          <Field label="결재 라인">
+            <div className="flex gap-2">
+              <label className={clsx("flex-1 h-9 px-3 border rounded flex items-center gap-1.5 cursor-pointer text-[12px]", (draft.approvalRoute ?? "internal") === "internal" ? "border-brand-300 bg-brand-50 text-brand-700" : "border-slate-200")}>
+                <input type="radio" checked={(draft.approvalRoute ?? "internal") === "internal"} onChange={() => set("approvalRoute" as any, "internal" as any)} className="text-brand-600" />
+                <span>내부 (3단계)</span>
+              </label>
+              <label className={clsx("flex-1 h-9 px-3 border rounded flex items-center gap-1.5 cursor-pointer text-[12px]", (draft.approvalRoute ?? "internal") === "external" ? "border-brand-300 bg-brand-50 text-brand-700" : "border-slate-200")}>
+                <input type="radio" checked={draft.approvalRoute === "external"} onChange={() => set("approvalRoute" as any, "external" as any)} className="text-brand-600" />
+                <span>외부 (2단계)</span>
+              </label>
+            </div>
+          </Field>
+
           {expense?.rejectReason && (
             <div className="px-3 py-2 bg-rose-50 border border-rose-200 rounded text-[11px] text-rose-700">
               <strong>반려 사유:</strong> {expense.rejectReason}
@@ -662,6 +712,87 @@ function Field({ label, children, required }: { label: string; children: React.R
         {required && <span className="text-rose-500">*</span>}
       </label>
       {children}
+    </div>
+  );
+}
+
+/* ─────────── 첨부 파일 입력 (이미지/PDF) ─────────── */
+
+function AttachmentInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string | null;
+  onChange: (url: string | null) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", f);
+      const res = await fetch("/api/uploads", { method: "POST", body: fd });
+      if (!res.ok) {
+        alert("업로드 실패");
+        return;
+      }
+      const json = await res.json();
+      onChange(json.url ?? json.path ?? null);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  const isImage = value && /\.(png|jpe?g|gif|webp|bmp)$/i.test(value);
+  return (
+    <div className="border border-slate-200 rounded p-2">
+      <div className="text-[11px] font-medium text-slate-700 mb-1.5 text-center bg-slate-100 -mx-2 -mt-2 px-2 py-1 rounded-t">
+        {label}
+      </div>
+      {value ? (
+        <div className="space-y-1">
+          {isImage ? (
+            <a href={value} target="_blank" rel="noopener" className="block">
+              <img
+                src={value}
+                alt={label}
+                className="w-full h-24 object-contain bg-slate-50 border border-slate-100 rounded"
+              />
+            </a>
+          ) : (
+            <a
+              href={value}
+              target="_blank"
+              rel="noopener"
+              className="block h-24 bg-slate-50 border border-slate-100 rounded flex items-center justify-center text-[11px] text-brand-600 hover:underline"
+            >
+              📎 파일 보기
+            </a>
+          )}
+          <div className="flex gap-1">
+            <label className="flex-1 h-7 px-2 text-[10.5px] bg-white hover:bg-slate-50 border border-slate-200 rounded cursor-pointer flex items-center justify-center text-slate-600">
+              <input type="file" accept="image/*,application/pdf" onChange={handleFile} className="hidden" />
+              교체
+            </label>
+            <button
+              onClick={() => onChange(null)}
+              className="h-7 px-2 text-[10.5px] bg-rose-50 hover:bg-rose-100 text-rose-700 rounded"
+            >
+              삭제
+            </button>
+          </div>
+        </div>
+      ) : (
+        <label className="block h-24 border-2 border-dashed border-slate-300 rounded cursor-pointer hover:border-brand-300 hover:bg-brand-50/50 flex items-center justify-center text-[11px] text-slate-400">
+          <input type="file" accept="image/*,application/pdf" onChange={handleFile} className="hidden" />
+          {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : "+ 파일 선택"}
+        </label>
+      )}
     </div>
   );
 }
