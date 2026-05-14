@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   if (!me) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const u = await prisma.user.findUnique({ where: { id: me.id }, select: { isInternal: true } });
-  if (!u?.isInternal) {
+  if (!u?.isInternal && me.role !== "admin") {
     return NextResponse.json({ error: "내부직원만 근태 체크가 가능합니다." }, { status: 403 });
   }
 

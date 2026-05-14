@@ -85,7 +85,7 @@ export default function LeavesClient({
   const [toApprove, setToApprove] = useState<LeaveRequest[]>(initialApprove);
   const [showForm, setShowForm] = useState(false);
 
-  async function submitRequest(payload: { type: string; startDate: string; endDate: string; reason: string }) {
+  async function submitRequest(payload: { type: string; startDate: string; endDate: string; reason: string; approvalRoute: "internal" | "external" }) {
     const res = await fetch("/api/leaves", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -328,21 +328,51 @@ function TabBtn({
   );
 }
 
+/** 휴가 종류 그리드 — 엑셀 양식 동일 */
+const TYPE_GRID = [
+  { value: "monthly", label: "월차" },
+  { value: "annual", label: "연차" },
+  { value: "public", label: "공가" },
+  { value: "sick", label: "병가" },
+];
+const SPECIAL_TYPES = [
+  { value: "maternity", label: "출산" },
+  { value: "summer", label: "하계" },
+  { value: "family_event", label: "경조" },
+  { value: "disaster", label: "재해" },
+];
+const EXTRA_TYPES = [
+  { value: "health", label: "보건" },
+  { value: "other", label: "기타" },
+];
+
 function RequestForm({
   onCancel,
   onSubmit,
 }: {
   onCancel: () => void;
-  onSubmit: (p: { type: string; startDate: string; endDate: string; reason: string }) => void;
+  onSubmit: (p: {
+    type: string;
+    startDate: string;
+    endDate: string;
+    reason: string;
+    approvalRoute: "internal" | "external";
+  }) => void;
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const [type, setType] = useState("annual");
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
   const [reason, setReason] = useState("");
+  const [approvalRoute, setApprovalRoute] = useState<"internal" | "external">("internal");
+  const [halfDay, setHalfDay] = useState<"" | "half_am" | "half_pm">(""); // 연차일 때 반차 선택
   const [saving, setSaving] = useState(false);
 
-  const isHalf = type === "half_am" || type === "half_pm";
+  const isHalf = halfDay !== "";
+  const effectiveType = isHalf ? halfDay : type;
+  const isDeducting = ["annual", "monthly", "half_am", "half_pm"].includes(effectiveType);
+  // 반차는 연차 선택 시에만 노출
+  const halfAvailable = type === "annual";
 
   async function submit() {
     if (!startDate || !endDate) {
@@ -351,34 +381,95 @@ function RequestForm({
     }
     setSaving(true);
     try {
-      await onSubmit({ type, startDate, endDate: isHalf ? startDate : endDate, reason });
+      await onSubmit({
+        type: effectiveType,
+        startDate,
+        endDate: isHalf ? startDate : endDate,
+        reason,
+        approvalRoute,
+      });
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <div className="bg-white border border-brand-200 rounded-xl p-4 mb-5 shadow-sm">
-      <div className="flex items-center justify-between mb-3">
+    <div className="bg-white border border-brand-200 rounded-xl p-5 mb-5 shadow-sm">
+      <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold">휴가 신청</h3>
         <button onClick={onCancel} className="text-slate-400 hover:text-slate-700">
           <X className="w-4 h-4" />
         </button>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div>
-          <label className="text-[10px] text-slate-400">종류</label>
-          <select
-            value={type}
-            onChange={(e) => setType(e.target.value)}
-            className="w-full h-8 px-2 text-[12px] border border-slate-200 rounded outline-none focus:border-brand-300"
-          >
-            <option value="annual">연차 (1일)</option>
-            <option value="monthly">월차 (1일)</option>
-            <option value="half_am">오전반차 (0.5일)</option>
-            <option value="half_pm">오후반차 (0.5일)</option>
-          </select>
+
+      <div className="text-[12px] text-slate-600 mb-3">
+        아래와 같이 신청하오니 승인하여 주시기 바랍니다.
+      </div>
+
+      {/* 휴가 구분 그리드 (엑셀 양식) */}
+      <div className="border border-slate-300 rounded mb-4 overflow-hidden">
+        <div className="grid grid-cols-12 bg-slate-100 text-[11px] font-medium text-slate-700">
+          <div className="col-span-1 px-2 py-1.5 border-r border-slate-300 text-center">휴가구분</div>
+          {TYPE_GRID.map((t) => (
+            <div key={t.value} className="col-span-1 px-2 py-1.5 border-r border-slate-300 text-center">{t.label}</div>
+          ))}
+          <div className="col-span-4 px-2 py-1.5 border-r border-slate-300 text-center">특별휴가</div>
+          {EXTRA_TYPES.map((t) => (
+            <div key={t.value} className="col-span-1 px-2 py-1.5 border-r border-slate-300 text-center last:border-r-0">{t.label}</div>
+          ))}
         </div>
+        <div className="grid grid-cols-12 bg-slate-50/50 text-[10px] text-slate-500">
+          <div className="col-span-1 px-2 py-1 border-r border-slate-300 text-center bg-slate-100/60"> </div>
+          {TYPE_GRID.map((_t) => (
+            <div key={_t.value} className="col-span-1 px-2 py-1 border-r border-slate-300 text-center"> </div>
+          ))}
+          {SPECIAL_TYPES.map((t) => (
+            <div key={t.value} className="col-span-1 px-2 py-1 border-r border-slate-300 text-center">{t.label}</div>
+          ))}
+          {EXTRA_TYPES.map((_t) => (
+            <div key={_t.value} className="col-span-1 px-2 py-1 border-r border-slate-300 text-center last:border-r-0"> </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-12">
+          <div className="col-span-1 bg-slate-100 px-2 py-2 border-r border-slate-300 text-[10px] text-center text-slate-500"> </div>
+          {TYPE_GRID.map((t) => (
+            <label key={t.value} className={clsx("col-span-1 px-2 py-2 border-r border-slate-300 text-center cursor-pointer hover:bg-brand-50", type === t.value && !isHalf && "bg-brand-100")}>
+              <input type="radio" name="type" checked={type === t.value && !isHalf} onChange={() => { setType(t.value); setHalfDay(""); }} className="text-brand-600" />
+            </label>
+          ))}
+          {SPECIAL_TYPES.map((t) => (
+            <label key={t.value} className={clsx("col-span-1 px-2 py-2 border-r border-slate-300 text-center cursor-pointer hover:bg-brand-50", type === t.value && "bg-brand-100")}>
+              <input type="radio" name="type" checked={type === t.value} onChange={() => { setType(t.value); setHalfDay(""); }} className="text-brand-600" />
+            </label>
+          ))}
+          {EXTRA_TYPES.map((t) => (
+            <label key={t.value} className={clsx("col-span-1 px-2 py-2 border-r border-slate-300 last:border-r-0 text-center cursor-pointer hover:bg-brand-50", type === t.value && "bg-brand-100")}>
+              <input type="radio" name="type" checked={type === t.value} onChange={() => { setType(t.value); setHalfDay(""); }} className="text-brand-600" />
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* 반차 옵션 (연차 선택 시) */}
+      {halfAvailable && (
+        <div className="flex items-center gap-3 mb-3 text-[12px]">
+          <span className="text-slate-500">반차:</span>
+          <label className="flex items-center gap-1 cursor-pointer">
+            <input type="radio" checked={halfDay === ""} onChange={() => setHalfDay("")} className="text-brand-600" />
+            <span>없음</span>
+          </label>
+          <label className="flex items-center gap-1 cursor-pointer">
+            <input type="radio" checked={halfDay === "half_am"} onChange={() => setHalfDay("half_am")} className="text-brand-600" />
+            <span>오전반차</span>
+          </label>
+          <label className="flex items-center gap-1 cursor-pointer">
+            <input type="radio" checked={halfDay === "half_pm"} onChange={() => setHalfDay("half_pm")} className="text-brand-600" />
+            <span>오후반차</span>
+          </label>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
         <div>
           <label className="text-[10px] text-slate-400">{isHalf ? "날짜" : "시작일"}</label>
           <input
@@ -402,17 +493,40 @@ function RequestForm({
             />
           </div>
         )}
-        <div className={isHalf ? "col-span-2" : ""}>
-          <label className="text-[10px] text-slate-400">사유 (선택)</label>
-          <input
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="개인 사유 / 병원 등"
-            className="w-full h-8 px-2 text-[12px] border border-slate-200 rounded outline-none focus:border-brand-300"
-          />
+        <div>
+          <label className="text-[10px] text-slate-400">결재 라인</label>
+          <div className="flex gap-2 mt-0.5">
+            <label className={clsx("flex-1 h-8 px-2 border rounded flex items-center gap-1 cursor-pointer text-[12px]", approvalRoute === "internal" ? "border-brand-300 bg-brand-50 text-brand-700" : "border-slate-200")}>
+              <input type="radio" checked={approvalRoute === "internal"} onChange={() => setApprovalRoute("internal")} className="text-brand-600" />
+              <span>내부 (3단계)</span>
+            </label>
+            <label className={clsx("flex-1 h-8 px-2 border rounded flex items-center gap-1 cursor-pointer text-[12px]", approvalRoute === "external" ? "border-brand-300 bg-brand-50 text-brand-700" : "border-slate-200")}>
+              <input type="radio" checked={approvalRoute === "external"} onChange={() => setApprovalRoute("external")} className="text-brand-600" />
+              <span>외부 (2단계)</span>
+            </label>
+          </div>
         </div>
       </div>
-      <div className="flex justify-end gap-2 mt-3">
+
+      <div>
+        <label className="text-[10px] text-slate-400">사유 (선택)</label>
+        <input
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="개인 사유 / 병원 / 가족 행사 등"
+          className="w-full h-8 px-2 text-[12px] border border-slate-200 rounded outline-none focus:border-brand-300"
+        />
+      </div>
+
+      <div className="mt-3 text-[10.5px] text-slate-500 bg-slate-50 border border-slate-100 rounded p-2">
+        {isDeducting
+          ? "⓵ 연차/월차/반차는 잔여 연차에서 차감됩니다."
+          : "⓵ 공가/병가/특별/보건/기타는 잔여 연차에서 차감되지 않습니다."}
+        {" "}
+        {approvalRoute === "internal" ? "내부 결재: 김혜진 → 박지윤 → 최진혁 (3단계)" : "외부 결재: 김혜진 → 최진혁 (2단계)"}
+      </div>
+
+      <div className="flex justify-end gap-2 mt-4">
         <button
           onClick={onCancel}
           className="h-8 px-3 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 text-[12px] font-medium rounded"

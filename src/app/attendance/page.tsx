@@ -15,6 +15,9 @@ export default async function AttendancePage() {
   });
   if (!myUser) redirect("/login");
 
+  // admin은 isInternal 무관하게 접근 허용 — 강제 활성
+  const effectiveInternal = myUser.isInternal || me.role === "admin";
+
   // 최근 30일 근태
   const since = new Date();
   since.setDate(since.getDate() - 30);
@@ -44,7 +47,7 @@ export default async function AttendancePage() {
 
   return (
     <AttendanceClient
-      me={myUser}
+      me={{ ...myUser, isInternal: effectiveInternal }}
       today={today ? serialize(today) : null}
       records={serialize(records)}
     />

@@ -16,18 +16,28 @@
 import { prisma } from "@/lib/prisma";
 
 export const LEAVE_TYPES = [
-  { value: "annual", label: "연차", days: 1 },
-  { value: "monthly", label: "월차", days: 1 },
-  { value: "half_am", label: "오전반차", days: 0.5 },
-  { value: "half_pm", label: "오후반차", days: 0.5 },
+  // 차감 대상 (연차/월차/반차 모두 annualLeave 잔여에서 차감)
+  { value: "annual", label: "연차", deducts: true, halfDay: false },
+  { value: "monthly", label: "월차", deducts: true, halfDay: false },
+  { value: "half_am", label: "오전반차", deducts: true, halfDay: true },
+  { value: "half_pm", label: "오후반차", deducts: true, halfDay: true },
+  // 차감 없음 (별도 카운트)
+  { value: "public", label: "공가", deducts: false, halfDay: false },
+  { value: "sick", label: "병가", deducts: false, halfDay: false },
+  { value: "maternity", label: "출산휴가", deducts: false, halfDay: false, special: true },
+  { value: "summer", label: "하계휴가", deducts: false, halfDay: false, special: true },
+  { value: "family_event", label: "경조휴가", deducts: false, halfDay: false, special: true },
+  { value: "disaster", label: "재해휴가", deducts: false, halfDay: false, special: true },
+  { value: "health", label: "보건휴가", deducts: false, halfDay: false },
+  { value: "other", label: "기타", deducts: false, halfDay: false },
 ] as const;
 
 export function getLeaveTypeLabel(type: string): string {
   return LEAVE_TYPES.find((t) => t.value === type)?.label ?? type;
 }
 
-export function getLeaveTypeDays(type: string): number {
-  return LEAVE_TYPES.find((t) => t.value === type)?.days ?? 1;
+export function getLeaveTypeMeta(type: string) {
+  return LEAVE_TYPES.find((t) => t.value === type);
 }
 
 export const APPROVAL_LEVELS = [
@@ -129,8 +139,10 @@ export async function getUserLeaveBalance(userId: string): Promise<LeaveBalance 
   let annualUsed = 0;
   let monthlyUsed = 0;
   for (const u of used) {
+    const meta = LEAVE_TYPES.find((t) => t.value === u.type);
+    if (!meta?.deducts) continue; // 공가/병가/특별/보건/기타는 잔여 차감 없음
     if (u.type === "monthly") monthlyUsed += u.days;
-    else annualUsed += u.days; // 연차/오전반차/오후반차 모두 연차 차감
+    else annualUsed += u.days;
   }
   const totalUsedThisYear = annualUsed + monthlyUsed;
 
@@ -149,31 +161,39 @@ export async function getUserLeaveBalance(userId: string): Promise<LeaveBalance 
 
 /**
  * 결재자 라인을 직위 기반으로 찾는다.
- *  Level 1: 사업운영본부 책임연구원 (김혜진)
- *  Level 2: 부대표 (박지윤)
- *  Level 3: 대표이사 (최진혁)
+ *  내부결재 (3단계): L1 본부장(김혜진) → L2 부대표(박지윤) → L3 대표이사(최진혁)
+ *  외부결재 (2단계): L1 본부장(김혜진) → L2 대표이사(최진혁) [박지윤 부대표 생략]
  */
-export async function resolveApprovalLine(): Promise<{ level: number; userId: string; name: string }[]> {
+export async function resolveApprovalLine(
+  route: "internal" | "external" = "internal"
+): Promise<{ level: number; userId: string; name: string }[]> {
   const candidates = await prisma.user.findMany({
     where: {
       status: "active",
       OR: [
-        { AND: [{ dept: "사업운영본부" }, { position: "책임연구원" }] }, // L1
-        { position: "부대표" }, // L2
-        { position: "대표이사" }, // L3
+        { AND: [{ dept: "사업운영본부" }, { position: "책임연구원" }] },
+        { position: "부대표" },
+        { position: "대표이사" },
       ],
     },
     select: { id: true, name: true, dept: true, position: true },
   });
 
-  const l1 = candidates.find((u) => u.dept === "사업운영본부" && u.position === "책임연구원");
-  const l2 = candidates.find((u) => u.position === "부대표");
-  const l3 = candidates.find((u) => u.position === "대표이사");
+  const l1 = candidates.find((u) => u.dept === "사업운영본부" && u.position === "책임연구원"); // 김혜진
+  const l2 = candidates.find((u) => u.position === "부대표"); // 박지윤
+  const l3 = candidates.find((u) => u.position === "대표이사"); // 최진혁
 
   const out: { level: number; userId: string; name: string }[] = [];
-  if (l1) out.push({ level: 1, userId: l1.id, name: l1.name });
-  if (l2) out.push({ level: 2, userId: l2.id, name: l2.name });
-  if (l3) out.push({ level: 3, userId: l3.id, name: l3.name });
+  if (route === "external") {
+    // 외부결재: 박지윤 생략. 김혜진 → 최진혁 2단계
+    if (l1) out.push({ level: 1, userId: l1.id, name: l1.name });
+    if (l3) out.push({ level: 2, userId: l3.id, name: l3.name });
+  } else {
+    // 내부결재: 3단계
+    if (l1) out.push({ level: 1, userId: l1.id, name: l1.name });
+    if (l2) out.push({ level: 2, userId: l2.id, name: l2.name });
+    if (l3) out.push({ level: 3, userId: l3.id, name: l3.name });
+  }
   return out;
 }
 
@@ -181,8 +201,12 @@ export async function resolveApprovalLine(): Promise<{ level: number; userId: st
  * 신청 생성 시 결재 라인을 LeaveApproval 레코드로 만든다.
  * 신청자가 라인 중 한 명이면 그 단계는 status="auto_passed" + decidedAt=now
  */
-export async function createApprovalChain(requestId: string, requesterId: string) {
-  const line = await resolveApprovalLine();
+export async function createApprovalChain(
+  requestId: string,
+  requesterId: string,
+  route: "internal" | "external" = "internal"
+) {
+  const line = await resolveApprovalLine(route);
   for (const step of line) {
     const auto = step.userId === requesterId;
     await prisma.leaveApproval.create({

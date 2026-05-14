@@ -67,6 +67,7 @@ model User {
   certificates       Certificate[]    @relation("UserCertificates")
   managedConsultantPlans   ConsultantPlan[]       @relation("ConsultantPlanManager")
   consultantAssignments    ConsultantAssignment[] @relation("ConsultantAssignmentConsultant")
+  tripReports              TripReport[]
 }
 
 // ─────────────────────────────── 업체/거래처 ───────────────────────────────
@@ -473,17 +474,20 @@ model Attendance {
 model LeaveRequest {
   id           String    @id @default(cuid())
   userId       String
-  type         String    // annual(연차) / monthly(월차) / half_am(오전반차) / half_pm(오후반차)
+  // 유형: annual / monthly / half_am / half_pm / public(공가) / sick(병가) /
+  //       maternity(출산) / summer(하계) / family_event(경조) / disaster(재해) / health(보건) / other(기타)
+  type         String
+  approvalRoute String   @default("internal") // internal(3단계) / external(2단계, 박지윤 생략)
   startDate    DateTime
   endDate      DateTime
   days         Float
   reason       String?
   status       String    @default("pending") // pending / approved / rejected / cancelled
   // 결재 진행
-  currentLevel Int       @default(1) // 1=본부장 / 2=부대표 / 3=대표이사
+  currentLevel Int       @default(1)
   finalApprovedAt DateTime?
-  approverId   String?   // 최종 결재자 id (호환용)
-  approvedDate DateTime? // 최종 결재 일자 (호환용)
+  approverId   String?
+  approvedDate DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -666,4 +670,31 @@ model ConsultantAssignment {
   @@index([planId])
   @@index([date])
   @@index([consultantId, date])
+}
+
+// 출장 보고서 (전자결재)
+model TripReport {
+  id            String    @id @default(cuid())
+  userId        String
+  title         String    // 출장 제목
+  destination   String?   // 출장지
+  purpose       String?   // 출장 목적
+  startDate     DateTime?
+  endDate       DateTime?
+  totalDays     Float?    // 출장 일수
+  totalCost     BigInt    @default(0) // 총 비용 (₩)
+  content       String?   // 출장 내용
+  result        String?   // 출장 결과
+  attachmentUrl String?
+  status        String    @default("draft") // draft / pending / approved / rejected / cancelled
+  approvalRoute String    @default("internal") // internal / external
+  currentLevel  Int       @default(1)
+  finalApprovedAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
 }

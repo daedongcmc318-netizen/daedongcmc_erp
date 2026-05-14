@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { createApprovalChain, getLeaveTypeDays } from "@/lib/leaves";
+import { createApprovalChain, getLeaveTypeMeta } from "@/lib/leaves";
 
 export const dynamic = "force-dynamic";
 
@@ -17,15 +17,20 @@ export async function POST(req: NextRequest) {
   if (!me) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const u = await prisma.user.findUnique({ where: { id: me.id }, select: { isInternal: true } });
-  if (!u?.isInternal) {
+  if (!u?.isInternal && me.role !== "admin") {
     return NextResponse.json({ error: "내부직원만 휴가 신청이 가능합니다." }, { status: 403 });
   }
 
   const body = await req.json();
   const { type, startDate, endDate, reason } = body;
+  const approvalRoute: "internal" | "external" =
+    body.approvalRoute === "external" ? "external" : "internal";
   if (!type || !startDate || !endDate) {
     return NextResponse.json({ error: "필수값 누락" }, { status: 400 });
   }
+  const meta = getLeaveTypeMeta(type);
+  if (!meta) return NextResponse.json({ error: "유효하지 않은 휴가 종류" }, { status: 400 });
+
   const s = new Date(startDate);
   const e = new Date(endDate);
   if (isNaN(s.getTime()) || isNaN(e.getTime())) {
@@ -33,9 +38,9 @@ export async function POST(req: NextRequest) {
   }
   if (e < s) return NextResponse.json({ error: "종료일이 시작일보다 빠릅니다." }, { status: 400 });
 
-  // days 계산: 반차면 0.5, 일반 휴가면 (endDate-startDate+1)
+  // days 계산: 반차면 0.5, 일반은 (endDate-startDate+1)
   let days: number;
-  if (type === "half_am" || type === "half_pm") {
+  if (meta.halfDay) {
     if (s.toDateString() !== e.toDateString()) {
       return NextResponse.json({ error: "반차는 같은 날짜로 신청해야 합니다." }, { status: 400 });
     }
@@ -49,6 +54,7 @@ export async function POST(req: NextRequest) {
     data: {
       userId: me.id,
       type,
+      approvalRoute,
       startDate: s,
       endDate: e,
       days,
@@ -58,7 +64,7 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  await createApprovalChain(created.id, me.id);
+  await createApprovalChain(created.id, me.id, approvalRoute);
 
   // 최종 상태 + approvals 포함하여 반환
   const full = await prisma.leaveRequest.findUnique({

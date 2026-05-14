@@ -21,6 +21,7 @@ import {
   ChevronRight,
   Wallet,
   Award,
+  Briefcase,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -62,7 +63,18 @@ const NAV: { group: string; items: NavItem[] }[] = [
   },
   {
     group: "결재",
-    items: [{ href: "/expenses", label: "지출결의", icon: Receipt }],
+    items: [
+      {
+        href: "/expenses",
+        label: "전자결재",
+        icon: Receipt,
+        children: [
+          { href: "/expenses", label: "지출결의서", icon: Receipt },
+          { href: "/expense-trips", label: "출장보고서", icon: Briefcase },
+          { href: "/leaves", label: "휴가신청서", icon: CalendarDays },
+        ],
+      },
+    ],
   },
   {
     group: "인사관리",
@@ -70,7 +82,6 @@ const NAV: { group: string; items: NavItem[] }[] = [
       { href: "/users", label: "직원 관리", icon: Users },
       { href: "/contracts", label: "전자근로계약", icon: FileSignature },
       { href: "/attendance", label: "근태", icon: Clock },
-      { href: "/leaves", label: "연차/휴가", icon: CalendarDays },
     ],
   },
   {

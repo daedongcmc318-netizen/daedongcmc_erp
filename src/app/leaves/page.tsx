@@ -68,7 +68,7 @@ export default async function LeavesPage() {
         name: myUser.name,
         dept: myUser.dept,
         position: myUser.position,
-        isInternal: myUser.isInternal,
+        isInternal: myUser.isInternal || me.role === "admin",
         joinDate: myUser.joinDate ? myUser.joinDate.toISOString() : null,
       }}
       balance={balance}
