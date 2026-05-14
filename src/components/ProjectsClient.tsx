@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState, useTransition, useRef } from "react";
+import { useEffect, useMemo, useState, useTransition, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   PROJECT_STATUS,
@@ -8,7 +8,7 @@ import {
   NURTURE_TYPE,
   REQUEST_STATUS,
 } from "@/lib/enums";
-import { Plus, X, Search, Trash2, ChevronDown, GripVertical } from "lucide-react";
+import { Plus, X, Search, Trash2, ChevronDown, GripVertical, History } from "lucide-react";
 import clsx from "clsx";
 import {
   InlineText,
@@ -19,6 +19,7 @@ import {
   DateRange,
   PillSelect,
 } from "@/components/projects/cells";
+import ProjectHistoryModal from "@/components/ProjectHistoryModal";
 
 type CompanyContact = { id?: string; name: string; phone?: string | null; email?: string | null };
 type Deliverable = {
@@ -230,18 +231,27 @@ export default function ProjectsClient({
   initialProjects,
   companies,
   users,
+  currentYear,
+  years,
 }: {
   initialProjects: Project[];
   companies: Company[];
   users: User[];
+  currentYear: number;
+  years: number[];
 }) {
   const router = useRouter();
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [projects, setProjects] = useState<Project[]>(initialProjects);
+
+  // 연도 라우팅 변경 시 server props 동기화
+  useEffect(() => {
+    setProjects(initialProjects);
+  }, [initialProjects]);
   const [tab, setTab] = useState<"nurture" | "discovery">("nurture");
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("");
   const [filterBiz, setFilterBiz] = useState<string>("");
-  const [filterYear, setFilterYear] = useState<string>("");
   const [filterPM, setFilterPM] = useState<string>("");
   const [filterDetail, setFilterDetail] = useState<string>("");
   const [filterManager, setFilterManager] = useState<string>("");
@@ -249,10 +259,6 @@ export default function ProjectsClient({
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
 
-  const years = useMemo(
-    () => Array.from(new Set(projects.map((p) => p.year))).sort((a, b) => b - a),
-    [projects]
-  );
   const pmCodes = useMemo(
     () => Array.from(new Set(users.map((u) => u.pmCode).filter(Boolean) as string[])),
     [users]
@@ -286,7 +292,7 @@ export default function ProjectsClient({
       .filter((p) => {
         if (filterStatus && p.status !== filterStatus) return false;
         if (filterBiz && p.bizCategory !== filterBiz) return false;
-        if (filterYear && String(p.year) !== filterYear) return false;
+        // 연도는 서버에서 이미 필터됨
         if (filterPM && p.pmCode !== filterPM) return false;
         if (filterDetail && p.serviceDetail !== filterDetail) return false;
         if (filterManager && p.managerId !== filterManager) return false;
@@ -301,7 +307,7 @@ export default function ProjectsClient({
         return true;
       })
       .sort((a, b) => a.sortOrder - b.sortOrder);
-  }, [projects, tab, filterStatus, filterBiz, filterYear, filterPM, filterDetail, filterManager, search]);
+  }, [projects, tab, filterStatus, filterBiz, filterPM, filterDetail, filterManager, search]);
 
   const tabCounts = {
     nurture: projects.filter((p) => p.source === "nurture").length,
@@ -473,16 +479,47 @@ export default function ProjectsClient({
         <div>
           <h1 className="text-xl font-semibold tracking-tight">프로젝트 관리</h1>
           <p className="text-xs text-slate-500 mt-1">
-            노션 DB 기반 · 현재 탭 합계{" "}
+            {currentYear}년 · 현재 탭 합계{" "}
             <span className="font-medium text-slate-700">₩{totalRevenue.toLocaleString()}</span>
           </p>
         </div>
-        <button
-          onClick={() => addProject()}
-          className="h-9 px-3 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-md flex items-center gap-1.5 shadow-sm"
-        >
-          <Plus className="w-4 h-4" /> 새 프로젝트
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setHistoryOpen(true)}
+            className="h-9 px-3 bg-white hover:bg-slate-50 text-brand-700 border border-brand-300 text-sm font-medium rounded-md flex items-center gap-1.5 shadow-sm"
+            title="전체 연도에서 거래처별 프로젝트 이력 검색"
+          >
+            <History className="w-4 h-4" /> 거래처 이력 검색
+          </button>
+          <button
+            onClick={() => addProject()}
+            className="h-9 px-3 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-md flex items-center gap-1.5 shadow-sm"
+          >
+            <Plus className="w-4 h-4" /> 새 프로젝트
+          </button>
+        </div>
+      </div>
+
+      {/* 연도 버튼 — 최신 연도가 선두 */}
+      <div className="mb-3 flex items-center gap-1.5 flex-wrap">
+        {years.map((y) => (
+          <button
+            key={y}
+            onClick={() => router.push(`/projects?year=${y}`)}
+            className={clsx(
+              "min-w-[64px] px-3 h-8 text-xs font-semibold rounded-lg border transition-all tabular-nums",
+              currentYear === y
+                ? "bg-brand-600 text-white border-brand-600 shadow-md scale-[1.02]"
+                : "bg-white text-slate-600 border-slate-200 hover:border-brand-300 hover:text-brand-700 hover:-translate-y-px"
+            )}
+          >
+            {y}년
+          </button>
+        ))}
+        {/* DB에 없는 연도는 '신규 연도' 버튼으로 추가 가능 */}
+        {!years.includes(currentYear) && (
+          <span className="text-[11px] text-slate-400 ml-2">※ {currentYear}년 데이터 없음</span>
+        )}
       </div>
 
       {/* 탭 */}
@@ -506,17 +543,15 @@ export default function ProjectsClient({
             className="h-7 pl-7 pr-3 rounded text-xs bg-slate-100 focus:bg-white focus:ring-2 focus:ring-brand-200 focus:outline-none w-48"
           />
         </div>
-        <FilterSelect value={filterYear} onChange={setFilterYear} label="연도" options={years.map((y) => ({ value: String(y), label: `${y}년` }))} />
         <FilterSelect value={filterBiz} onChange={setFilterBiz} label="사업영역" options={BIZ_CATEGORY.map((b) => ({ value: b.value, label: b.label }))} />
         <FilterSelect value={filterStatus} onChange={setFilterStatus} label="진행현황" options={PROJECT_STATUS.map((b) => ({ value: b.value, label: b.label }))} />
         <FilterSelect value={filterPM} onChange={setFilterPM} label="PM" options={pmCodes.map((c) => ({ value: c, label: c }))} />
         <FilterSelect value={filterManager} onChange={setFilterManager} label="담당자" options={managerOptions} />
         <FilterSelect value={filterDetail} onChange={setFilterDetail} label="상세서비스" options={detailOptions.map((d) => ({ value: d, label: d }))} />
-        {(filterYear || filterBiz || filterStatus || filterPM || filterManager || filterDetail || search) && (
+        {(filterBiz || filterStatus || filterPM || filterManager || filterDetail || search) && (
           <button
             className="text-[11px] text-slate-500 hover:text-slate-800 flex items-center gap-1 px-2 h-7"
             onClick={() => {
-              setFilterYear("");
               setFilterBiz("");
               setFilterStatus("");
               setFilterPM("");
@@ -598,6 +633,11 @@ export default function ProjectsClient({
           <Plus className="w-3.5 h-3.5" /> 새 프로젝트 추가
         </button>
       </div>
+
+      {/* 거래처 이력 검색 모달 */}
+      {historyOpen && (
+        <ProjectHistoryModal onClose={() => setHistoryOpen(false)} />
+      )}
     </div>
   );
 }
