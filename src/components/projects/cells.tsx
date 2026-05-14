@@ -223,6 +223,8 @@ export function DateRange({
     if (typeof d === "string") return d.slice(0, 10);
     return "";
   };
+  const startStr = fmt(start) || null;
+  const endStr = fmt(end) || null;
   if (!editing) {
     return (
       <div
@@ -244,14 +246,14 @@ export function DateRange({
       <input
         type="date"
         value={fmt(start)}
-        onChange={(e) => onChange(e.target.value || null, end)}
+        onChange={(e) => onChange(e.target.value || null, endStr)}
         className="h-6 px-1 text-[10px] border border-brand-300 rounded outline-none"
       />
       <span className="text-slate-300">→</span>
       <input
         type="date"
         value={fmt(end)}
-        onChange={(e) => onChange(start, e.target.value || null)}
+        onChange={(e) => onChange(startStr, e.target.value || null)}
         className="h-6 px-1 text-[10px] border border-brand-300 rounded outline-none"
       />
       <button onClick={() => setEditing(false)} className="text-slate-400 hover:text-slate-700">
