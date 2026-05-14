@@ -15,6 +15,7 @@ import {
   FileSignature,
   KeyRound,
   UserCheck,
+  ShieldCheck,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -48,6 +49,7 @@ const NAV = [
     items: [
       { href: "/settings", label: "설정", icon: Settings },
       { href: "/accounts", label: "계정관리", icon: KeyRound },
+      { href: "/permissions", label: "권한관리", icon: ShieldCheck },
     ],
   },
 ];

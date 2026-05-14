@@ -58,6 +58,7 @@ model User {
   attendance         Attendance[]
   leaveRequests      LeaveRequest[] @relation("LeaveRequester")
   approvedLeaves     LeaveRequest[] @relation("LeaveApprover")
+  educations         UserEducation[]
 }
 
 // ─────────────────────────────── 업체/거래처 ───────────────────────────────
@@ -84,6 +85,40 @@ model Company {
   clientProjects    Project[] @relation("ProjectClient")
   agencyProjects    Project[] @relation("ProjectAgency")
   taxInvoices       TaxInvoice[]
+}
+
+// 역할별 섹션 권한 매트릭스
+model Permission {
+  id        String   @id @default(cuid())
+  role      String   // admin / manager / staff
+  section   String   // dashboard / projects / managers / companies / invoices / card_purchases / expenses / contracts / users / accounts / permissions / settings
+  canView   Boolean  @default(false)
+  canEdit   Boolean  @default(false)
+  canDelete Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+
+  @@unique([role, section])
+  @@index([role])
+}
+
+// 직원 학력 (인사카드 인쇄용)
+model UserEducation {
+  id            String   @id @default(cuid())
+  userId        String
+  level         String   // 고졸 / 전문대 / 대학 / 대학원-석사 / 대학원-박사 등
+  schoolName    String
+  major         String?  // 전공
+  location      String?  // 소재지
+  enterDate     DateTime?
+  graduateDate  DateTime?
+  daytime       String?  // 주간 / 야간 / 사이버
+  graduateType  String?  // 졸업 / 재학 / 휴학 / 중퇴
+  note          String?
+  sortOrder     Int      @default(0)
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model CompanyContact {

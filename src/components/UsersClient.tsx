@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { Plus, Search, Printer, X, UserPlus } from "lucide-react";
 import clsx from "clsx";
 import UserModal from "@/components/UserModal";
+import EmployeeCardModal from "@/components/EmployeeCardModal";
 
 export type User = {
   id: string;
@@ -67,6 +68,7 @@ export default function UsersClient({ initialUsers }: { initialUsers: User[] }) 
   const [filterPosition, setFilterPosition] = useState("");
   const [editing, setEditing] = useState<User | null>(null);
   const [creating, setCreating] = useState(false);
+  const [printUser, setPrintUser] = useState<User | null>(null);
 
   const filtered = useMemo(() => {
     return users.filter((u) => {
@@ -236,7 +238,7 @@ export default function UsersClient({ initialUsers }: { initialUsers: User[] }) 
                     className="text-center px-2 py-1.5"
                     onClick={(e) => {
                       e.stopPropagation();
-                      window.print();
+                      setPrintUser(u);
                     }}
                   >
                     <button className="text-[11px] text-slate-400 hover:text-brand-600 inline-flex items-center gap-1">
@@ -270,6 +272,10 @@ export default function UsersClient({ initialUsers }: { initialUsers: User[] }) 
           onSave={handleSave}
           onDelete={handleDelete}
         />
+      )}
+
+      {printUser && (
+        <EmployeeCardModal user={printUser} onClose={() => setPrintUser(null)} />
       )}
     </div>
   );
