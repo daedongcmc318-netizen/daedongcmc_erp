@@ -62,6 +62,8 @@ model User {
   leaveApprovals     LeaveApproval[] @relation("LeaveApprovalApprover")
   educations         UserEducation[]
   certificates       Certificate[]    @relation("UserCertificates")
+  managedConsultantPlans   ConsultantPlan[]       @relation("ConsultantPlanManager")
+  consultantAssignments    ConsultantAssignment[] @relation("ConsultantAssignmentConsultant")
 }
 
 // ─────────────────────────────── 업체/거래처 ───────────────────────────────
@@ -212,6 +214,7 @@ model Project {
   expenses      ExpenseRequest[]
   mgmtFeeBudgets MgmtFeeBudget[]
   histories     ProjectHistory[]
+  consultantPlans ConsultantPlan[]
 
   @@index([status])
   @@index([bizCategory])
@@ -611,4 +614,48 @@ model TrackRecord {
   @@index([processedDate])
   @@index([status])
   @@index([electronicTaxInvoiceId])
+}
+
+// ─────────────────────────────── 컨설턴트 MD 플래너 ───────────────────────────────
+// 사업(Project)별 컨설팅 비용으로 필요 MD 산정 + 컨설턴트(User)를 일별로 배정.
+// 핵심 제약: 한 컨설턴트는 같은 날짜에 하나의 배정만 가능 (@@unique 로 강제).
+model ConsultantPlan {
+  id               String   @id @default(cuid())
+  year             Int      @default(2026)
+  title            String   // 사업명/업체명 (표시용, projectId 없을 시 freetext)
+  projectId        String?  // 기존 프로젝트 연결 (optional)
+  managerId        String?  // 담당자 (User)
+  consultingBudget BigInt   @default(0) // 컨설팅 금액 (원)
+  dailyRate        BigInt   @default(1000000) // 일 단가 (default 100만원)
+  requiredMD       Int      @default(0) // 필요 MD (자동 = consultingBudget / dailyRate, 수동 조정 가능)
+  notes            String?
+  sortOrder        Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  project          Project? @relation(fields: [projectId], references: [id])
+  manager          User?    @relation("ConsultantPlanManager", fields: [managerId], references: [id])
+  assignments      ConsultantAssignment[]
+
+  @@index([year])
+  @@index([projectId])
+  @@index([managerId])
+}
+
+model ConsultantAssignment {
+  id           String   @id @default(cuid())
+  planId       String
+  consultantId String   // User.id (내부직원 / 그 외 직원도 허용)
+  date         DateTime @db.Date
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  plan         ConsultantPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  consultant   User           @relation("ConsultantAssignmentConsultant", fields: [consultantId], references: [id], onDelete: Cascade)
+
+  // ★ 핵심: 한 컨설턴트의 같은 날짜에 단 하나의 배정만 (더블 부킹 방지)
+  @@unique([consultantId, date])
+  @@index([planId])
+  @@index([date])
+  @@index([consultantId, date])
 }
