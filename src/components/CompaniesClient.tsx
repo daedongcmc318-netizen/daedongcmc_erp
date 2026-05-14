@@ -1,10 +1,11 @@
 "use client";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, X, Search, Trash2, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, FileText } from "lucide-react";
+import { Plus, X, Search, Trash2, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, FileText, FileScan } from "lucide-react";
 import clsx from "clsx";
 import { InlineText, PillSelect, InlineDate } from "@/components/projects/cells";
 import CompanyInvoicesModal from "@/components/CompanyInvoicesModal";
+import CompanyOcrModal from "@/components/CompanyOcrModal";
 
 type Contact = {
   id: string;
@@ -94,6 +95,7 @@ export default function CompaniesClient({ initialCompanies }: { initialCompanies
   const [filterHasInvoice, setFilterHasInvoice] = useState(false);
   const [page, setPage] = useState(0);
   const [invoiceModalId, setInvoiceModalId] = useState<string | null>(null);
+  const [ocrOpen, setOcrOpen] = useState(false);
 
   const regions = useMemo(() => {
     const s = new Set<string>();
@@ -228,12 +230,20 @@ export default function CompaniesClient({ initialCompanies }: { initialCompanies
             프로젝트 연결 <span className="font-medium text-slate-700">{withProj.toLocaleString()}</span>개사
           </p>
         </div>
-        <button
-          onClick={addCompany}
-          className="h-9 px-3 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-md flex items-center gap-1.5 shadow-sm"
-        >
-          <Plus className="w-4 h-4" /> 새 거래처
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setOcrOpen(true)}
+            className="h-9 px-3 bg-white hover:bg-slate-50 text-brand-700 border border-brand-300 text-sm font-medium rounded-md flex items-center gap-1.5 shadow-sm"
+          >
+            <FileScan className="w-4 h-4" /> 사업자등록증으로 등록
+          </button>
+          <button
+            onClick={addCompany}
+            className="h-9 px-3 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-md flex items-center gap-1.5 shadow-sm"
+          >
+            <Plus className="w-4 h-4" /> 새 거래처
+          </button>
+        </div>
       </div>
 
       {/* 필터 */}
@@ -360,6 +370,19 @@ export default function CompaniesClient({ initialCompanies }: { initialCompanies
         {/* 세금계산서 거래이력 모달 */}
         {invoiceModalId && (
           <CompanyInvoicesModal companyId={invoiceModalId} onClose={() => setInvoiceModalId(null)} />
+        )}
+
+        {/* 사업자등록증 OCR 모달 */}
+        {ocrOpen && (
+          <CompanyOcrModal
+            onClose={() => setOcrOpen(false)}
+            onCreated={(c) => {
+              setCompanies((prev) => [{ ...c, invoiceCount: 0 } as any, ...prev]);
+              setOcrOpen(false);
+              setPage(0);
+              router.refresh();
+            }}
+          />
         )}
 
         {/* 페이지네이션 */}
