@@ -1,10 +1,11 @@
 "use client";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Search, Printer, X, UserPlus } from "lucide-react";
+import { Plus, Search, Printer, X, UserPlus, FileText, FileBadge } from "lucide-react";
 import clsx from "clsx";
 import UserModal from "@/components/UserModal";
 import EmployeeCardModal from "@/components/EmployeeCardModal";
+import CertificateModal from "@/components/CertificateModal";
 
 export type User = {
   id: string;
@@ -69,6 +70,7 @@ export default function UsersClient({ initialUsers }: { initialUsers: User[] }) 
   const [editing, setEditing] = useState<User | null>(null);
   const [creating, setCreating] = useState(false);
   const [printUser, setPrintUser] = useState<User | null>(null);
+  const [certUser, setCertUser] = useState<{ user: User; type: "employment" | "career" } | null>(null);
 
   const filtered = useMemo(() => {
     return users.filter((u) => {
@@ -215,6 +217,8 @@ export default function UsersClient({ initialUsers }: { initialUsers: User[] }) 
                 <th className="text-left px-2.5 py-2.5 w-24">입사일자</th>
                 <th className="text-left px-2.5 py-2.5 w-40">계좌번호</th>
                 <th className="text-left px-2.5 py-2.5">Email</th>
+                <th className="w-24 text-center px-2 py-2.5">재직증명서</th>
+                <th className="w-24 text-center px-2 py-2.5">경력증명서</th>
                 <th className="w-16 text-center px-2 py-2.5">인쇄</th>
               </tr>
             </thead>
@@ -238,6 +242,28 @@ export default function UsersClient({ initialUsers }: { initialUsers: User[] }) 
                     className="text-center px-2 py-1.5"
                     onClick={(e) => {
                       e.stopPropagation();
+                      setCertUser({ user: u, type: "employment" });
+                    }}
+                  >
+                    <button className="text-[11px] text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 inline-flex items-center gap-1 px-2 py-1 rounded font-medium">
+                      <FileText className="w-3.5 h-3.5" /> 재직
+                    </button>
+                  </td>
+                  <td
+                    className="text-center px-2 py-1.5"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCertUser({ user: u, type: "career" });
+                    }}
+                  >
+                    <button className="text-[11px] text-violet-600 hover:text-violet-800 hover:bg-violet-50 inline-flex items-center gap-1 px-2 py-1 rounded font-medium">
+                      <FileBadge className="w-3.5 h-3.5" /> 경력
+                    </button>
+                  </td>
+                  <td
+                    className="text-center px-2 py-1.5"
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setPrintUser(u);
                     }}
                   >
@@ -249,7 +275,7 @@ export default function UsersClient({ initialUsers }: { initialUsers: User[] }) 
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="text-center py-12 text-slate-400 text-sm">
+                  <td colSpan={12} className="text-center py-12 text-slate-400 text-sm">
                     표시할 직원이 없습니다
                   </td>
                 </tr>
@@ -276,6 +302,14 @@ export default function UsersClient({ initialUsers }: { initialUsers: User[] }) 
 
       {printUser && (
         <EmployeeCardModal user={printUser} onClose={() => setPrintUser(null)} />
+      )}
+
+      {certUser && (
+        <CertificateModal
+          user={certUser.user}
+          type={certUser.type}
+          onClose={() => setCertUser(null)}
+        />
       )}
     </div>
   );
