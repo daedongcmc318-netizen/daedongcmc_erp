@@ -73,7 +73,7 @@ export default function InvoicesClient({
     setSummary(initialSummary);
   }, [initialSummary]);
   const [search, setSearch] = useState("");
-  const [searchField, setSearchField] = useState<"partner" | "item" | "amount">("partner");
+  const [searchField, setSearchField] = useState<"all" | "partner" | "item" | "amount">("all");
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState<string | null>(null);
 
@@ -91,6 +91,49 @@ export default function InvoicesClient({
   const filtered = useMemo(() => {
     if (!search) return items;
     return items.filter((it) => {
+      // 전체검색 — 거래처/품목/사업자번호/승인번호/비고 모두 + 금액 비교 자동 인식
+      if (searchField === "all") {
+        const raw = search.trim();
+        // 비교 연산자가 있으면 amount 모드처럼 동작
+        if (/^(>=|<=|>|<|=)/.test(raw) || /^\d[\d,]*\s*[-~]\s*\d/.test(raw)) {
+          // 위 amount 로직 재사용
+          const range = raw.match(/^(\d[\d,]*)\s*[-~]\s*(\d[\d,]*)$/);
+          if (range) {
+            const lo = Number(range[1].replace(/,/g, ""));
+            const hi = Number(range[2].replace(/,/g, ""));
+            const amt = Number(it.supplyAmount);
+            return amt >= lo && amt <= hi;
+          }
+          const cmp = raw.match(/^(>=|<=|>|<|=)\s*(\d[\d,]*)$/);
+          if (cmp) {
+            const n = Number(cmp[2].replace(/,/g, ""));
+            const amt = Number(it.supplyAmount);
+            switch (cmp[1]) {
+              case ">=": return amt >= n;
+              case "<=": return amt <= n;
+              case ">": return amt > n;
+              case "<": return amt < n;
+              case "=": return amt === n;
+            }
+          }
+        }
+        const q = raw.toLowerCase();
+        const qDigits = q.replace(/[^\d]/g, "");
+        const hay = [
+          it.supplierName,
+          it.buyerName,
+          it.itemName,
+          it.approvalNo,
+          it.note,
+          it.category,
+          it.paymentType,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        const bizHay = `${it.supplierBizNo} ${it.buyerBizNo}`;
+        return hay.includes(q) || (qDigits.length >= 3 && bizHay.includes(qDigits));
+      }
       if (searchField === "amount") {
         // 숫자 파싱 + 비교 연산자 지원: "1000000", ">=1000000", ">1000000", "<1000000", "1000000-5000000"
         const raw = search.trim();
@@ -264,6 +307,7 @@ export default function InvoicesClient({
             onChange={(e) => setSearchField(e.target.value as any)}
             className="text-xs bg-slate-50 hover:bg-slate-100 border-r border-slate-200 px-2 pr-6 cursor-pointer text-slate-700 font-medium outline-none appearance-none"
           >
+            <option value="all">전체</option>
             <option value="partner">거래처</option>
             <option value="item">품목명</option>
             <option value="amount">공급가액</option>
@@ -274,11 +318,13 @@ export default function InvoicesClient({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={
-                searchField === "partner"
-                  ? "거래처명 또는 사업자번호..."
-                  : searchField === "item"
-                    ? "품목명 키워드..."
-                    : "공급가액 (예: 1000000, >=500000, 100000-500000)"
+                searchField === "all"
+                  ? "거래처, 사업자번호, 품목, 비고... (>=1000000 가능)"
+                  : searchField === "partner"
+                    ? "거래처명 또는 사업자번호..."
+                    : searchField === "item"
+                      ? "품목명 키워드..."
+                      : "공급가액 (예: 1000000, >=500000, 100000-500000)"
               }
               className={clsx(
                 "h-7 pl-7 pr-2 text-xs outline-none w-72",
