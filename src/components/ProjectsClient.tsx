@@ -8,7 +8,7 @@ import {
   NURTURE_TYPE,
   REQUEST_STATUS,
 } from "@/lib/enums";
-import { Plus, X, Search, Trash2, ChevronDown, GripVertical, History } from "lucide-react";
+import { Plus, X, Search, Trash2, ChevronDown, GripVertical, History, Download, UserCheck } from "lucide-react";
 import clsx from "clsx";
 import {
   InlineText,
@@ -233,12 +233,16 @@ export default function ProjectsClient({
   users,
   currentYear,
   years,
+  currentManagerId,
+  selectedManager,
 }: {
   initialProjects: Project[];
   companies: Company[];
   users: User[];
   currentYear: number;
   years: number[];
+  currentManagerId: string | null;
+  selectedManager: { id: string; name: string; dept: string; position: string; pmCode: string | null } | null;
 }) {
   const router = useRouter();
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -477,13 +481,46 @@ export default function ProjectsClient({
       {/* 헤더 */}
       <div className="flex items-end justify-between mb-4">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">프로젝트 관리</h1>
+          <div className="flex items-center gap-2 mb-1">
+            {selectedManager ? (
+              <>
+                <UserCheck className="w-4 h-4 text-brand-500" />
+                <span className="text-xs text-slate-500">담당자별 관리 ▸</span>
+                <span className="text-xs font-semibold text-brand-700">{selectedManager.name}</span>
+                <button
+                  onClick={() => router.push(`/projects?year=${currentYear}`)}
+                  className="text-[10px] text-slate-400 hover:text-slate-700 underline ml-2"
+                >
+                  전체 보기
+                </button>
+              </>
+            ) : (
+              <span className="text-xs text-slate-500">프로젝트 관리</span>
+            )}
+          </div>
+          <h1 className="text-xl font-semibold tracking-tight">
+            {selectedManager ? `${selectedManager.name} 담당 프로젝트` : "프로젝트 관리"}
+          </h1>
           <p className="text-xs text-slate-500 mt-1">
+            {selectedManager ? (
+              <>
+                {selectedManager.dept} · {selectedManager.position}
+                {selectedManager.pmCode && ` · ${selectedManager.pmCode}`} ·{" "}
+              </>
+            ) : null}
             {currentYear}년 · 현재 탭 합계{" "}
             <span className="font-medium text-slate-700">₩{totalRevenue.toLocaleString()}</span>
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <a
+            href={`/api/projects/export?year=${currentYear}${currentManagerId ? `&manager=${currentManagerId}` : ""}`}
+            download
+            className="h-9 px-3 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-sm font-medium rounded-md flex items-center gap-1.5 shadow-sm"
+            title={`현재 필터(${currentYear}년${selectedManager ? ` · ${selectedManager.name}` : ""})로 엑셀 백업 다운로드`}
+          >
+            <Download className="w-4 h-4" /> 엑셀 백업
+          </a>
           <button
             onClick={() => setHistoryOpen(true)}
             className="h-9 px-3 bg-white hover:bg-slate-50 text-brand-700 border border-brand-300 text-sm font-medium rounded-md flex items-center gap-1.5 shadow-sm"

@@ -14,6 +14,7 @@ import {
   CreditCard,
   FileSignature,
   KeyRound,
+  UserCheck,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -23,6 +24,7 @@ const NAV = [
     group: "사업",
     items: [
       { href: "/projects", label: "프로젝트 관리", icon: FolderKanban },
+      { href: "/managers", label: "담당자별 관리", icon: UserCheck },
       { href: "/companies", label: "업체/거래처", icon: Building2 },
       { href: "/invoices", label: "세금계산서", icon: FileSpreadsheet },
       { href: "/card-purchases", label: "카드매입", icon: CreditCard },

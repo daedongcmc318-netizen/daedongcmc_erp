@@ -8,15 +8,27 @@ export const revalidate = 0;
 export default async function ProjectsPage({
   searchParams,
 }: {
-  searchParams: { year?: string };
+  searchParams: { year?: string; manager?: string };
 }) {
   // 연도별 데이터 분리: URL 파라미터 우선, 없으면 현재 연도
   const currentYear = new Date().getFullYear();
   const year = searchParams.year ? Number(searchParams.year) : currentYear;
+  const managerId = searchParams.manager?.trim() || null;
+
+  const where: any = { year };
+  if (managerId) where.managerId = managerId;
+
+  // 선택된 담당자 정보 (헤더 표시용)
+  const selectedManager = managerId
+    ? await prisma.user.findUnique({
+        where: { id: managerId },
+        select: { id: true, name: true, dept: true, position: true, pmCode: true },
+      })
+    : null;
 
   const [projects, companies, users, allYears] = await Promise.all([
     prisma.project.findMany({
-      where: { year },
+      where,
       include: {
         company: { include: { contacts: { take: 1, orderBy: { isPrimary: "desc" } } } },
         agency: true,
@@ -48,6 +60,8 @@ export default async function ProjectsPage({
       users={users as any}
       currentYear={year}
       years={years}
+      currentManagerId={managerId}
+      selectedManager={selectedManager as any}
     />
   );
 }

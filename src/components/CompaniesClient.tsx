@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, X, Search, Trash2, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, FileText, FileScan } from "lucide-react";
+import { Plus, X, Search, Trash2, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, FileText, FileScan, Download } from "lucide-react";
 import clsx from "clsx";
 import { InlineText, PillSelect, InlineDate } from "@/components/projects/cells";
 import CompanyInvoicesModal from "@/components/CompanyInvoicesModal";
@@ -231,6 +231,14 @@ export default function CompaniesClient({ initialCompanies }: { initialCompanies
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <a
+            href="/api/companies/export"
+            download
+            className="h-9 px-3 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-sm font-medium rounded-md flex items-center gap-1.5 shadow-sm"
+            title="전체 거래처 + 키맨 시트 엑셀 다운로드"
+          >
+            <Download className="w-4 h-4" /> 엑셀 백업
+          </a>
           <button
             onClick={() => setOcrOpen(true)}
             className="h-9 px-3 bg-white hover:bg-slate-50 text-brand-700 border border-brand-300 text-sm font-medium rounded-md flex items-center gap-1.5 shadow-sm"
