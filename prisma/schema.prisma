@@ -631,6 +631,10 @@ model ConsultantPlan {
   consultingBudget BigInt   @default(0) // 컨설팅 금액 (원)
   dailyRate        BigInt   @default(1000000) // 일 단가 (default 100만원)
   requiredMD       Int      @default(0) // 필요 MD (자동 = consultingBudget / dailyRate, 수동 조정 가능)
+  startDate        DateTime? // 서비스 시작일
+  endDate          DateTime? // 서비스 종료일
+  contractEndDate  DateTime? // 계약 마감일
+  serviceNumber    String?   // 서비스 구매번호
   notes            String?
   sortOrder        Int      @default(0)
   createdAt        DateTime @default(now())
