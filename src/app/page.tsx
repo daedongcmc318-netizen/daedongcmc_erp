@@ -111,9 +111,10 @@ async function getDashboardData() {
       where: { year, managerId: { not: null } },
       _count: true,
     }),
+    // 월별 마감현황: 육성 프로젝트 전체 (완료보고일자 기준, 일자 없는 건은 별도 버킷)
     prisma.project.findMany({
-      where: { year, endDate: { not: null } },
-      select: { endDate: true, serviceType: true, finalReportYn: true },
+      where: { year, source: "nurture" },
+      select: { finalReportDate: true, serviceType: true, finalReportYn: true, title: true, displayCode: true },
     }),
     // 이번달 마감 예정 = 종료일자가 이번달에 속한 건 (이미 지난 일자 포함, 완료보고 미완료만)
     prisma.project.count({
@@ -452,8 +453,8 @@ export default async function DashboardPage() {
       </div>
 
       {/* 월별 마감현황 */}
-      <Card title={`월별 마감현황 — ${data.year}년 종료일자 기준`}>
-        <DueByMonth items={data.dueProjects} />
+      <Card title={`월별 마감현황 — ${data.year}년 육성 프로젝트 (완료보고일자 기준)`}>
+        <DueByMonth items={data.dueProjects as any} />
       </Card>
     </div>
   );
@@ -827,30 +828,38 @@ const SERVICE_COLORS: Record<string, string> = {
   cost_settlement: "#64748b",
 };
 
-function DueByMonth({ items }: { items: { endDate: Date | null; serviceType: string | null; finalReportYn: boolean }[] }) {
+function DueByMonth({ items }: { items: { finalReportDate: Date | string | null; serviceType: string | null; finalReportYn: boolean }[] }) {
   const byMonth = new Map<string, Map<string, number>>();
+  const noDateByService = new Map<string, number>();
+  let noDateTotal = 0;
   for (const p of items) {
-    if (!p.endDate) continue;
-    const d = new Date(p.endDate);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     const svcKey = p.serviceType || "_unknown";
+    if (!p.finalReportDate) {
+      noDateByService.set(svcKey, (noDateByService.get(svcKey) ?? 0) + 1);
+      noDateTotal++;
+      continue;
+    }
+    const d = new Date(p.finalReportDate);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     if (!byMonth.has(key)) byMonth.set(key, new Map());
     const m = byMonth.get(key)!;
     m.set(svcKey, (m.get(svcKey) ?? 0) + 1);
   }
 
   const months = Array.from(byMonth.keys()).sort();
+  // "완료보고일자 없음" 버킷도 함께 표시 (있으면 맨 앞)
   const totals = months.map((m) => Array.from(byMonth.get(m)!.values()).reduce((a, b) => a + b, 0));
-  const maxTotal = Math.max(1, ...totals);
-  const niceCeil = Math.ceil(maxTotal / 5) * 5;
+  const maxTotal = Math.max(1, noDateTotal, ...totals);
+  const niceCeil = Math.ceil(maxTotal / 5) * 5 || 5;
   const gridSteps = 4;
   const gridLines = Array.from({ length: gridSteps + 1 }, (_, i) => Math.round((niceCeil / gridSteps) * (gridSteps - i)));
 
   const usedServices = new Set<string>();
   byMonth.forEach((m) => m.forEach((_, k) => usedServices.add(k)));
+  noDateByService.forEach((_, k) => usedServices.add(k));
 
-  if (months.length === 0) {
-    return <div className="text-xs text-slate-400 py-16 text-center">종료일자가 지정된 프로젝트가 없습니다</div>;
+  if (months.length === 0 && noDateTotal === 0) {
+    return <div className="text-xs text-slate-400 py-16 text-center">육성 프로젝트가 없습니다</div>;
   }
 
   return (
@@ -868,15 +877,38 @@ function DueByMonth({ items }: { items: { endDate: Date | null; serviceType: str
             ))}
           </div>
           <div className="flex items-end gap-2 h-56 relative">
+            {/* '완료보고일자 없음' 버킷 — 회색 톤으로 맨 앞 */}
+            {noDateTotal > 0 && (
+              <div className="flex-1 flex flex-col items-center justify-end gap-1 min-w-0 group h-full">
+                <span className="text-[10px] tabular-nums text-slate-700 font-semibold">{noDateTotal}</span>
+                <div
+                  className="w-full max-w-[44px] flex flex-col-reverse rounded-md overflow-hidden cursor-pointer transition group-hover:shadow-md border border-slate-200"
+                  style={{ height: `${(noDateTotal / niceCeil) * 100}%`, minHeight: "3px" }}
+                  title={`완료보고일자 미지정: ${noDateTotal}건`}
+                >
+                  {Array.from(noDateByService.entries())
+                    .sort(([a], [b]) => (a > b ? 1 : -1))
+                    .map(([svc, count]) => {
+                      const segHeight = (count / noDateTotal) * 100;
+                      const color = SERVICE_COLORS[svc] ?? "#e2e8f0";
+                      return (
+                        <div
+                          key={svc}
+                          style={{ height: `${segHeight}%`, background: color, opacity: 0.55 }}
+                          title={`${getServiceLabel(svc) || "기타"}: ${count}건`}
+                        />
+                      );
+                    })}
+                </div>
+              </div>
+            )}
             {months.map((m, i) => {
               const monthData = byMonth.get(m)!;
               const total = totals[i];
               const heightPct = (total / niceCeil) * 100;
               return (
                 <div key={m} className="flex-1 flex flex-col items-center justify-end gap-1 min-w-0 group h-full">
-                  <span className="text-[10px] tabular-nums text-slate-700 font-semibold opacity-0 group-hover:opacity-100 transition">
-                    {total}
-                  </span>
+                  <span className="text-[10px] tabular-nums text-slate-700 font-semibold">{total}</span>
                   <div
                     className="w-full max-w-[44px] flex flex-col-reverse rounded-md overflow-hidden cursor-pointer transition group-hover:shadow-md"
                     style={{ height: `${heightPct}%`, minHeight: "3px" }}
@@ -900,6 +932,11 @@ function DueByMonth({ items }: { items: { endDate: Date | null; serviceType: str
             })}
           </div>
           <div className="flex gap-2 mt-2">
+            {noDateTotal > 0 && (
+              <div className="flex-1 text-center">
+                <div className="text-[10px] text-slate-500">완료보고일자 없음</div>
+              </div>
+            )}
             {months.map((m) => {
               const [year, mo] = m.split("-");
               const isThisMonth = new Date().getFullYear() === Number(year) && new Date().getMonth() + 1 === Number(mo);
