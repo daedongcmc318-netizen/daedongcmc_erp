@@ -15,7 +15,8 @@
     "db:seed-companies": "tsx prisma/seed-companies.ts",
     "db:seed-invoices": "tsx prisma/seed-invoices.ts",
     "db:seed-deliverables": "tsx prisma/seed-deliverables.ts",
-    "db:seed-all": "npm run db:seed && npm run db:seed-users && npm run db:seed-passwords && npm run db:seed-companies && npm run db:seed-invoices && npm run db:seed-deliverables",
+    "db:seed-historical": "tsx prisma/seed-historical.ts",
+    "db:seed-all": "npm run db:seed && npm run db:seed-users && npm run db:seed-passwords && npm run db:seed-companies && npm run db:seed-invoices && npm run db:seed-deliverables && npm run db:seed-historical",
     "db:studio": "prisma studio"
   },
   "dependencies": {

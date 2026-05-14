@@ -13,6 +13,7 @@ import {
   Settings,
   CreditCard,
   FileSignature,
+  KeyRound,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -40,7 +41,13 @@ const NAV = [
       { href: "/leaves", label: "연차/휴가", icon: CalendarDays },
     ],
   },
-  { group: "시스템", items: [{ href: "/settings", label: "설정", icon: Settings }] },
+  {
+    group: "시스템",
+    items: [
+      { href: "/settings", label: "설정", icon: Settings },
+      { href: "/accounts", label: "계정관리", icon: KeyRound },
+    ],
+  },
 ];
 
 export default function Sidebar() {
