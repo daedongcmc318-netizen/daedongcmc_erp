@@ -65,11 +65,12 @@ export default function CardPurchasesClient({
       const json = await res.json();
       if (!res.ok) setUploadMsg(`업로드 실패: ${json.error ?? "오류"}`);
       else {
-        setUploadMsg(
-          `${files.length}개 파일 처리 · 파싱 ${json.parsed} / 적재 ${json.upserted}${
-            json.errors?.length ? ` · 오류 ${json.errors.length}` : ""
-          }`
-        );
+        const parts: string[] = [`${files.length}개 파일 처리`];
+        if (json.created) parts.push(`✨ 신규 ${json.created}건`);
+        if (json.updated) parts.push(`갱신 ${json.updated}건`);
+        if (json.errors?.length) parts.push(`⚠ 오류 ${json.errors.length}건`);
+        if (!json.created && !json.updated) parts.push("새 건 없음 (모두 기존 데이터)");
+        setUploadMsg(parts.join(" · "));
         router.refresh();
       }
     } catch (e: any) {

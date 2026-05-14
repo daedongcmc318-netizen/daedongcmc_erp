@@ -147,11 +147,14 @@ export default function InvoicesClient({
       if (!res.ok) {
         setUploadMsg(`업로드 실패: ${json.error ?? "알 수 없는 오류"}`);
       } else {
-        setUploadMsg(
-          `${files.length}개 파일 처리 · 파싱 ${json.parsed}건 / 적재 ${json.upserted}건${
-            json.skipped ? ` / 스킵 ${json.skipped}건` : ""
-          }${json.errors?.length ? ` · 오류 ${json.errors.length}건` : ""}`
-        );
+        const parts: string[] = [];
+        parts.push(`${files.length}개 파일 처리`);
+        if (json.created) parts.push(`✨ 신규 ${json.created}건`);
+        if (json.updated) parts.push(`갱신 ${json.updated}건 (중복 자동 처리)`);
+        if (json.skipped) parts.push(`스킵 ${json.skipped}건`);
+        if (json.errors?.length) parts.push(`⚠ 오류 ${json.errors.length}건`);
+        if (!json.created && !json.updated) parts.push("새 건 없음 (모두 기존 데이터)");
+        setUploadMsg(parts.join(" · "));
         router.refresh();
       }
     } catch (e: any) {

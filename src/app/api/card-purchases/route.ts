@@ -80,7 +80,8 @@ export async function POST(req: NextRequest) {
   if (files.length === 0) return NextResponse.json({ error: "files required" }, { status: 400 });
 
   let parsed = 0;
-  let upserted = 0;
+  let created = 0;
+  let updated = 0;
   const errors: string[] = [];
 
   for (const file of files) {
@@ -143,15 +144,21 @@ export async function POST(req: NextRequest) {
 
         try {
           if (approvalNo) {
-            await prisma.cardPurchase.upsert({
+            const exists = await prisma.cardPurchase.findUnique({
               where: { approvalNo },
-              update: data,
-              create: data,
+              select: { id: true },
             });
+            if (exists) {
+              await prisma.cardPurchase.update({ where: { approvalNo }, data });
+              updated++;
+            } else {
+              await prisma.cardPurchase.create({ data });
+              created++;
+            }
           } else {
             await prisma.cardPurchase.create({ data });
+            created++;
           }
-          upserted++;
         } catch {
           // skip
         }
@@ -162,5 +169,5 @@ export async function POST(req: NextRequest) {
     }
   }
   revalidatePath("/card-purchases");
-  return NextResponse.json({ parsed, upserted, errors });
+  return NextResponse.json({ parsed, created, updated, errors });
 }

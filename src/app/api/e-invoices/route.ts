@@ -108,7 +108,8 @@ export async function POST(req: NextRequest) {
   }
 
   let parsed = 0;
-  let upserted = 0;
+  let created = 0;
+  let updated = 0;
   let skipped = 0;
   const errors: string[] = [];
 
@@ -194,12 +195,18 @@ export async function POST(req: NextRequest) {
         };
 
         try {
-          await prisma.electronicTaxInvoice.upsert({
+          // 기존 존재 여부 먼저 확인 → 신규/갱신 구분
+          const existing = await prisma.electronicTaxInvoice.findUnique({
             where: { approvalNo },
-            update: data,
-            create: data,
+            select: { id: true },
           });
-          upserted++;
+          if (existing) {
+            await prisma.electronicTaxInvoice.update({ where: { approvalNo }, data });
+            updated++;
+          } else {
+            await prisma.electronicTaxInvoice.create({ data });
+            created++;
+          }
         } catch (e: any) {
           skipped++;
         }
@@ -211,5 +218,5 @@ export async function POST(req: NextRequest) {
   }
 
   revalidatePath("/invoices");
-  return NextResponse.json({ parsed, upserted, skipped, errors });
+  return NextResponse.json({ parsed, created, updated, skipped, errors });
 }
