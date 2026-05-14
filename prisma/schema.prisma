@@ -49,6 +49,9 @@ model User {
   annualLeaveTotal   Float    @default(0)
   annualLeaveUsed    Float    @default(0)
   isInternal         Boolean  @default(false) // 내부직원 여부 (연차/근태 대상)
+  // 컨설턴트 MD
+  consultantGrade    String?  // 1급 / 2급 / 3급 / 4급 등 — 미설정시 MD 플래너 미참여
+  consultantRate     BigInt   @default(0) // 컨설턴트 일단가 (원). consultantGrade 있으면 0 이상
   passwordHash       String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt

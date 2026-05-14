@@ -32,6 +32,8 @@ export type User = {
   address: string | null;
   passportNo: string | null;
   isInternal?: boolean;
+  consultantGrade?: string | null;
+  consultantRate?: string | null; // BigInt → string when serialized
 };
 
 const DEPTS = [

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 
 const DATE_FIELDS = ["joinDate", "leaveDate"];
 const FLOAT_FIELDS = ["annualLeaveTotal", "annualLeaveUsed"];
+const BIGINT_FIELDS = ["consultantRate"];
 const BOOL_FIELDS = ["isInternal"];
 const ALLOWED = new Set([
   "empNo",
@@ -34,6 +35,8 @@ const ALLOWED = new Set([
   "annualLeaveTotal",
   "annualLeaveUsed",
   "isInternal",
+  "consultantGrade",
+  "consultantRate",
 ]);
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -49,6 +52,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       data[k] = v ? new Date(v as string) : null;
     } else if (FLOAT_FIELDS.includes(k)) {
       data[k] = Number(v);
+    } else if (BIGINT_FIELDS.includes(k)) {
+      data[k] = v == null || v === "" ? BigInt(0) : BigInt(v as any);
     } else if (BOOL_FIELDS.includes(k)) {
       data[k] = !!v;
     } else {

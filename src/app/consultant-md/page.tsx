@@ -29,8 +29,11 @@ export default async function ConsultantMDPage({
     }),
     prisma.user.findMany({
       where: { status: "active" },
-      select: { id: true, name: true, dept: true, position: true, isInternal: true, pmCode: true },
-      orderBy: [{ isInternal: "desc" }, { name: "asc" }],
+      select: {
+        id: true, name: true, dept: true, position: true, isInternal: true, pmCode: true,
+        consultantGrade: true, consultantRate: true,
+      },
+      orderBy: [{ consultantGrade: "asc" }, { name: "asc" }],
     }),
     prisma.project.findMany({
       where: { year },

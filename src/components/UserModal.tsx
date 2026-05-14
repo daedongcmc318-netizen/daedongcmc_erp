@@ -213,6 +213,45 @@ export default function UserModal({
                       </span>
                     </label>
                   </Field>
+                  <Field label="컨설턴트 등급">
+                    <select
+                      value={(draft as any).consultantGrade ?? ""}
+                      onChange={(e) => {
+                        const grade = e.target.value || null;
+                        set("consultantGrade" as any, grade as any);
+                        // 등급 선택 시 기본 일단가 자동 채움
+                        const defaultRate: Record<string, number> = {
+                          "1급": 834000,
+                          "2급": 757000,
+                          "3급": 644000,
+                          "4급": 518000,
+                        };
+                        if (grade && defaultRate[grade] && !Number((draft as any).consultantRate)) {
+                          set("consultantRate" as any, defaultRate[grade] as any);
+                        }
+                      }}
+                      className="form-input"
+                    >
+                      <option value="">— 미설정 (MD 플래너 미참여) —</option>
+                      <option value="1급">1급 (₩834,000)</option>
+                      <option value="2급">2급 (₩757,000)</option>
+                      <option value="3급">3급 (₩644,000)</option>
+                      <option value="4급">4급 (₩518,000)</option>
+                    </select>
+                  </Field>
+                  <Field label="컨설턴트 일단가 (원)">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={(draft as any).consultantRate?.toString?.() ?? ""}
+                      onChange={(e) => {
+                        const v = e.target.value.replace(/[^\d]/g, "");
+                        set("consultantRate" as any, (v || 0) as any);
+                      }}
+                      placeholder="등급 기본값 자동 적용 가능"
+                      className="form-input text-right tabular-nums"
+                    />
+                  </Field>
                 </Grid>
               </Section>
 
