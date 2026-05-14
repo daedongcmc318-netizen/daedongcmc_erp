@@ -224,7 +224,17 @@ model ProjectDeliverable {
   fileUrl       String?
   notes         String?
 
+  // 검토 워크플로우
+  reviewStatus       String    @default("pending")
+  // pending(미검토) / in_review(검토중) / approved(완료) / revision(보완필요)
+  reviewSubmittedAt  DateTime?
+  reviewedAt         DateTime?
+  reviewedById       String?
+  reviewFeedback     String?
+
   project       Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([reviewStatus])
 }
 
 // 카드 매입 (법인카드 매입내역) — 엑셀 업로드용

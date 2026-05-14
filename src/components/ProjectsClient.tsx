@@ -28,6 +28,10 @@ type Deliverable = {
   title: string;
   isCompleted: boolean;
   completedDate: string | null;
+  reviewStatus?: string;
+  reviewSubmittedAt?: string | null;
+  reviewedAt?: string | null;
+  reviewFeedback?: string | null;
 };
 type TaxInvoice = {
   id: string;
@@ -1271,16 +1275,88 @@ function renderCell(
       const seq = Number(c.slice(-1));
       const d = getDeliverable(seq);
       const dateLabel = d?.completedDate ? (typeof d.completedDate === "string" ? d.completedDate.slice(0, 10) : "") : "";
+      const status = d?.reviewStatus ?? "pending";
+      const bg =
+        status === "approved"
+          ? "bg-pink-100"
+          : status === "in_review"
+            ? "bg-blue-100"
+            : status === "revision"
+              ? "bg-rose-100"
+              : "";
+      const submitReview = async () => {
+        if (!d?.title) {
+          alert("산출물명을 먼저 입력하세요");
+          return;
+        }
+        const res = await fetch(`/api/project-deliverables/${d.id}/review`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "submit" }),
+        });
+        if (res.ok) {
+          onUpsertDeliverable(seq, {}); // 새로고침 유발
+          // 실제로는 상위에서 router.refresh() 호출 필요
+          window.location.reload();
+        } else {
+          alert("검토 요청 실패");
+        }
+      };
+
       return (
-        <div>
+        <div className={clsx("rounded px-1 py-1 -m-1", bg)}>
           <InlineText
             value={d?.title ?? ""}
             onSave={(v) => onUpsertDeliverable(seq, { title: v })}
             placeholder="—"
-            className="text-slate-700 text-[11px]"
+            className={clsx(
+              "text-[11px]",
+              status === "approved" ? "text-pink-900 font-medium" : "text-slate-700"
+            )}
           />
           {dateLabel && (
             <div className="text-[10px] text-slate-400 tabular-nums mt-0.5">{dateLabel}</div>
+          )}
+          {d?.title && (
+            <div className="flex items-center gap-1 mt-1">
+              {status === "pending" && (
+                <button
+                  onClick={submitReview}
+                  className="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 hover:bg-blue-200 text-slate-700 hover:text-blue-800 font-medium"
+                >
+                  검토 요청
+                </button>
+              )}
+              {status === "in_review" && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500 text-white font-medium">
+                  ⏳ 검토중
+                </span>
+              )}
+              {status === "approved" && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-pink-500 text-white font-medium">
+                  ✓ 완료
+                </span>
+              )}
+              {status === "revision" && (
+                <>
+                  <button
+                    onClick={submitReview}
+                    className="text-[10px] px-1.5 py-0.5 rounded bg-rose-500 hover:bg-blue-500 text-white font-medium"
+                    title={d?.reviewFeedback ?? ""}
+                  >
+                    재요청
+                  </button>
+                  {d?.reviewFeedback && (
+                    <span
+                      className="text-[10px] text-rose-700 truncate max-w-[120px]"
+                      title={d.reviewFeedback}
+                    >
+                      💬 {d.reviewFeedback}
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
           )}
         </div>
       );
