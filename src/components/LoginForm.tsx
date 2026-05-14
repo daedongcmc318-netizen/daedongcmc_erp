@@ -23,9 +23,23 @@ export default function LoginForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
       });
-      const data = await res.json();
+      // 빈 응답/HTML 응답 방어
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        setError(
+          `서버 응답 파싱 실패 (status=${res.status}): ${text.slice(0, 200) || "(empty)"}`
+        );
+        setLoading(false);
+        return;
+      }
       if (!res.ok) {
-        setError(data.error ?? "로그인 실패");
+        setError(
+          data.error ?? "로그인 실패" +
+            (data.detail ? ` — ${data.detail}` : "")
+        );
         setLoading(false);
         return;
       }
