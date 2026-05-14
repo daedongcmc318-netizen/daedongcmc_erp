@@ -26,7 +26,7 @@ export default async function ProjectsPage({
       })
     : null;
 
-  const [projects, companies, users, allYears] = await Promise.all([
+  const [projects, companies, users, allYears, customOptions] = await Promise.all([
     prisma.project.findMany({
       where,
       include: {
@@ -41,14 +41,19 @@ export default async function ProjectsPage({
     }),
     prisma.company.findMany({ orderBy: { name: "asc" } }),
     prisma.user.findMany({
+      where: { status: "active" },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, pmCode: true, position: true },
+      select: { id: true, name: true, pmCode: true, position: true, isInternal: true },
     }),
     // DB에 존재하는 모든 연도 (버튼 표시용)
     prisma.project.findMany({
       select: { year: true },
       distinct: ["year"],
       orderBy: { year: "desc" },
+    }),
+    // 사용자가 추가한 드롭다운 옵션들
+    prisma.dropdownOption.findMany({
+      orderBy: [{ category: "asc" }, { sortOrder: "asc" }],
     }),
   ]);
 
@@ -69,6 +74,7 @@ export default async function ProjectsPage({
       years={years}
       currentManagerId={managerId}
       selectedManager={selectedManager as any}
+      customOptions={customOptions as any}
     />
   );
 }

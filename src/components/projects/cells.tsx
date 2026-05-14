@@ -2,7 +2,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import clsx from "clsx";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, Plus, Loader2 } from "lucide-react";
 
 /* ─────────── 텍스트 ─────────── */
 export function InlineText({
@@ -264,22 +264,30 @@ export function DateRange({
   );
 }
 
-/* ─────────── 드롭다운 (pill) — portal + 위/아래 자동감지 ─────────── */
-export function PillSelect<T extends { value: string; label: string }>({
+/* ─────────── 드롭다운 (pill) — portal + 위/아래 자동감지 + 옵션 추가 ─────────── */
+export function PillSelect<T extends { value: string; label: string; color?: string }>({
   value,
   options,
   onChange,
   renderPill,
   placeholder,
+  addCategory,
+  onOptionAdded,
 }: {
   value: string | null;
   options: readonly T[];
   onChange: (v: string) => void;
   renderPill: (option: T | null) => React.ReactNode;
   placeholder?: string;
+  /** 카테고리 명시 시 '옵션 추가' 버튼 노출 (DropdownOption 테이블 저장) */
+  addCategory?: string;
+  onOptionAdded?: (created: { id: string; category: string; value: string; label: string; color: string | null }) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number; width: number; placement: "down" | "up" }>({
     top: 0,
     left: 0,
@@ -288,6 +296,30 @@ export function PillSelect<T extends { value: string; label: string }>({
   });
   const btnRef = useRef<HTMLButtonElement | null>(null);
   const current = options.find((o) => o.value === value) ?? null;
+
+  async function addOption() {
+    if (!addCategory || !draft.trim()) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/dropdown-options", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category: addCategory, label: draft.trim() }),
+      });
+      if (!res.ok) {
+        alert("옵션 추가 실패");
+        return;
+      }
+      const created = await res.json();
+      onOptionAdded?.(created);
+      onChange(created.value);
+      setDraft("");
+      setAdding(false);
+      setOpen(false);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   useEffect(() => {
     setMounted(true);
@@ -362,6 +394,42 @@ export function PillSelect<T extends { value: string; label: string }>({
                   {renderPill(o)}
                 </button>
               ))}
+              {addCategory && (
+                <div className="border-t border-slate-100 mt-1 pt-1">
+                  {adding ? (
+                    <div className="px-2 py-1 flex items-center gap-1">
+                      <input
+                        autoFocus
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") addOption();
+                          else if (e.key === "Escape") {
+                            setAdding(false);
+                            setDraft("");
+                          }
+                        }}
+                        placeholder="새 옵션 이름"
+                        className="flex-1 h-6 px-1.5 text-[11px] border border-brand-300 rounded outline-none ring-2 ring-brand-200 bg-white"
+                      />
+                      <button
+                        onClick={addOption}
+                        disabled={saving || !draft.trim()}
+                        className="h-6 px-2 text-[10px] font-medium bg-brand-600 hover:bg-brand-700 text-white rounded disabled:opacity-60 flex items-center gap-0.5"
+                      >
+                        {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setAdding(true)}
+                      className="w-full text-left px-2 py-1 hover:bg-brand-50 text-[11px] text-brand-600 font-medium flex items-center gap-1"
+                    >
+                      <Plus className="w-3 h-3" /> 옵션 추가
+                    </button>
+                  )}
+                </div>
+              )}
               <div className="border-t border-slate-100 mt-1 pt-1">
                 <button
                   onClick={() => {

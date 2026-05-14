@@ -91,7 +91,7 @@ type Project = {
 };
 
 type Company = { id: string; name: string; type: string };
-type User = { id: string; name: string; pmCode: string | null; position: string };
+type User = { id: string; name: string; pmCode: string | null; position: string; isInternal?: boolean };
 
 // 발굴 시트 컬럼 (엑셀 순서 그대로)
 const DISCOVERY_COLS = [
@@ -242,6 +242,8 @@ const COL_META: Record<string, { label: string; w: string }> = {
   delete: { label: "", w: "w-10" },
 };
 
+type CustomOption = { id: string; category: string; value: string; label: string; color: string | null };
+
 export default function ProjectsClient({
   initialProjects,
   companies,
@@ -250,6 +252,7 @@ export default function ProjectsClient({
   years,
   currentManagerId,
   selectedManager,
+  customOptions: initialCustomOptions,
 }: {
   initialProjects: Project[];
   companies: Company[];
@@ -258,10 +261,26 @@ export default function ProjectsClient({
   years: number[];
   currentManagerId: string | null;
   selectedManager: { id: string; name: string; dept: string; position: string; pmCode: string | null } | null;
+  customOptions: CustomOption[];
 }) {
   const router = useRouter();
   const [historyOpen, setHistoryOpen] = useState(false);
   const [notesProjectId, setNotesProjectId] = useState<string | null>(null);
+  const [customOptions, setCustomOptions] = useState<CustomOption[]>(initialCustomOptions ?? []);
+
+  /** 카테고리별 옵션 가져오기 (사용자 추가분만) */
+  const optionsFor = (category: string) =>
+    customOptions
+      .filter((o) => o.category === category)
+      .map((o) => ({ value: o.value, label: o.label, color: o.color ?? undefined }));
+
+  /** 옵션 추가 시 즉시 state에 반영 */
+  const handleOptionAdded = (created: CustomOption) => {
+    setCustomOptions((prev) => {
+      if (prev.some((p) => p.id === created.id)) return prev;
+      return [...prev, created];
+    });
+  };
   const [projects, setProjects] = useState<Project[]>(initialProjects);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -616,7 +635,7 @@ export default function ProjectsClient({
   const totalRevenue = filtered.reduce((acc, p) => acc + Number(p.confirmedRevenue ?? 0), 0);
 
   return (
-    <div className="px-6 py-6">
+    <div className="px-3 py-4">
       {/* 헤더 */}
       <div className="flex items-end justify-between mb-4">
         <div>
@@ -805,6 +824,8 @@ export default function ProjectsClient({
                   onDrop={() => reorderRows(p.id)}
                   onInsertAfter={() => addProject(p.id)}
                   onOpenNotes={() => setNotesProjectId(p.id)}
+                  customOptionsFor={optionsFor}
+                  onOptionAdded={handleOptionAdded}
                 />
               ))}
               {filtered.length === 0 && (
@@ -978,6 +999,8 @@ function ProjectRow({
   onDrop,
   onInsertAfter,
   onOpenNotes,
+  customOptionsFor,
+  onOptionAdded,
 }: {
   project: Project;
   cols: readonly string[];
@@ -996,6 +1019,8 @@ function ProjectRow({
   onDrop: () => void;
   onInsertAfter: () => void;
   onOpenNotes: () => void;
+  customOptionsFor: (category: string) => { value: string; label: string; color?: string }[];
+  onOptionAdded: (created: { id: string; category: string; value: string; label: string; color: string | null }) => void;
 }) {
   const inv = project.taxInvoices[0] ?? null;
   const contact = project.company?.contacts?.[0] ?? null;
@@ -1031,7 +1056,7 @@ function ProjectRow({
             )}
             style={isFrozen ? { left: `${left}px`, zIndex: 5 } : undefined}
           >
-            {renderCell(c, project, inv, contact, users, onPatch, invUpdate, onUpsertDeliverable, onDelete, onDragStart, onInsertAfter, isSelected, onToggleSelect, onOpenNotes)}
+            {renderCell(c, project, inv, contact, users, onPatch, invUpdate, onUpsertDeliverable, onDelete, onDragStart, onInsertAfter, isSelected, onToggleSelect, onOpenNotes, customOptionsFor, onOptionAdded)}
           </td>
         );
       })}
@@ -1053,7 +1078,9 @@ function renderCell(
   onInsertAfter: () => void,
   isSelected: boolean,
   onToggleSelect: () => void,
-  onOpenNotes: () => void
+  onOpenNotes: () => void,
+  customOptionsFor: (category: string) => { value: string; label: string; color?: string }[],
+  onOptionAdded: (created: { id: string; category: string; value: string; label: string; color: string | null }) => void
 ) {
   const getDeliverable = (seq: number) => p.deliverables.find((d) => d.seq === seq) ?? null;
   switch (c) {
@@ -1130,12 +1157,22 @@ function renderCell(
         </div>
       );
     }
-    case "bizCategory":
+    case "bizCategory": {
+      const merged = [
+        ...BIZ_CATEGORY,
+        ...customOptionsFor("bizCategory").map((o) => ({
+          value: o.value,
+          label: o.label,
+          color: o.color ?? "bg-slate-50 text-slate-700 ring-slate-200",
+        })),
+      ];
       return (
         <PillSelect
           value={p.bizCategory}
-          options={BIZ_CATEGORY}
+          options={merged}
           onChange={(v) => onPatch({ bizCategory: v })}
+          addCategory="bizCategory"
+          onOptionAdded={onOptionAdded}
           renderPill={(o) =>
             o ? (
               <span className={clsx("px-2 py-0.5 rounded text-[11px] ring-1 font-medium whitespace-nowrap", o.color)}>
@@ -1145,6 +1182,7 @@ function renderCell(
           }
         />
       );
+    }
     case "agency":
       return (
         <InlineText
@@ -1154,22 +1192,39 @@ function renderCell(
           className="text-slate-600 whitespace-nowrap"
         />
       );
-    case "serviceType":
+    case "serviceType": {
+      const mergedSvc = [
+        ...SERVICE_TYPE,
+        ...customOptionsFor("serviceType").map((o) => ({ value: o.value, label: o.label })),
+      ];
       return (
         <PillSelect
           value={p.serviceType}
-          options={SERVICE_TYPE}
+          options={mergedSvc}
           onChange={(v) => onPatch({ serviceType: v })}
           placeholder="서비스"
+          addCategory="serviceType"
+          onOptionAdded={onOptionAdded}
           renderPill={(o) => (o ? <span className="text-[11px] text-slate-700 whitespace-nowrap">{o.label}</span> : null)}
         />
       );
-    case "status":
+    }
+    case "status": {
+      const mergedStatus = [
+        ...PROJECT_STATUS,
+        ...customOptionsFor("projectStatus").map((o) => ({
+          value: o.value,
+          label: o.label,
+          color: o.color ?? "bg-slate-100 text-slate-700",
+        })),
+      ];
       return (
         <PillSelect
           value={p.status}
-          options={PROJECT_STATUS}
+          options={mergedStatus}
           onChange={(v) => onPatch({ status: v })}
+          addCategory="projectStatus"
+          onOptionAdded={onOptionAdded}
           renderPill={(o) =>
             o ? (
               <span className={clsx("px-2 py-0.5 rounded text-[11px] font-medium whitespace-nowrap", o.color)}>
@@ -1179,6 +1234,7 @@ function renderCell(
           }
         />
       );
+    }
     case "serviceDetail":
       return (
         <InlineText
@@ -1221,7 +1277,18 @@ function renderCell(
       );
     }
     case "manager": {
-      const opts = users.map((u) => ({ value: u.id, label: u.name }));
+      // 담당자 = 내부직원(isInternal)만 노출. 기존에 외부직원이 담당자로 지정된 경우만 라벨에 (외부) 표시.
+      const internalUsers = users.filter((u) => u.isInternal);
+      const externalCurrent =
+        p.managerId && !internalUsers.find((u) => u.id === p.managerId)
+          ? users.find((u) => u.id === p.managerId)
+          : null;
+      const opts = [
+        ...(externalCurrent
+          ? [{ value: externalCurrent.id, label: `${externalCurrent.name} (외부)` }]
+          : []),
+        ...internalUsers.map((u) => ({ value: u.id, label: u.name })),
+      ];
       return (
         <PillSelect
           value={p.managerId}
@@ -1258,12 +1325,22 @@ function renderCell(
           onSave={(v) => onPatch({ confirmedRevenue: v })}
         />
       );
-    case "nurtureType":
+    case "nurtureType": {
+      const mergedNur = [
+        ...NURTURE_TYPE,
+        ...customOptionsFor("nurtureType").map((o) => ({
+          value: o.value,
+          label: o.label,
+          color: o.color ?? "bg-slate-50 text-slate-700 ring-slate-200",
+        })),
+      ];
       return (
         <PillSelect
           value={p.nurtureType}
-          options={NURTURE_TYPE}
+          options={mergedNur}
           onChange={(v) => onPatch({ nurtureType: v })}
+          addCategory="nurtureType"
+          onOptionAdded={onOptionAdded}
           renderPill={(o) =>
             o ? (
               <span className={clsx("px-1.5 py-0.5 rounded text-[10px] ring-1 font-medium whitespace-nowrap", o.color)}>
@@ -1273,15 +1350,23 @@ function renderCell(
           }
         />
       );
-    case "requestStatus":
+    }
+    case "requestStatus": {
+      const mergedReq = [
+        ...REQUEST_STATUS,
+        ...customOptionsFor("requestStatus").map((o) => ({ value: o.value, label: o.label })),
+      ];
       return (
         <PillSelect
           value={p.requestStatus}
-          options={REQUEST_STATUS}
+          options={mergedReq}
           onChange={(v) => onPatch({ requestStatus: v })}
+          addCategory="requestStatus"
+          onOptionAdded={onOptionAdded}
           renderPill={(o) => (o ? <span className="text-[11px] text-slate-700 whitespace-nowrap">{o.label}</span> : null)}
         />
       );
+    }
     case "agreementYn":
       return <div className="text-center"><CheckCell value={p.agreementYn} onChange={(v) => onPatch({ agreementYn: v })} /></div>;
     case "advancePaidYn":

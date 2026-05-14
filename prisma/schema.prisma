@@ -219,6 +219,22 @@ model Project {
   @@index([year])
 }
 
+// 드롭다운 옵션 (사용자 정의 추가 옵션)
+//   하드코딩 enum(BIZ_CATEGORY 등)은 그대로 두고, 이 테이블의 row는 추가 옵션으로 머지된다.
+//   category: bizCategory / projectStatus / serviceType / nurtureType / requestStatus / serviceDetail / region 등
+model DropdownOption {
+  id        String   @id @default(cuid())
+  category  String
+  value     String
+  label     String
+  color     String?  // tailwind class (옵션)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@unique([category, value])
+  @@index([category])
+}
+
 // 프로젝트 특이사항/히스토리 메모 (제목 옆 서류 아이콘으로 표시)
 model ProjectHistory {
   id          String   @id @default(cuid())
