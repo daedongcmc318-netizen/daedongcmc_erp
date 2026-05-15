@@ -14,7 +14,6 @@ import {
   AlarmClock,
 } from "lucide-react";
 import Donut from "@/components/dashboard/Donut";
-import MyLeaveAttendanceWidget from "@/components/MyLeaveAttendanceWidget";
 import InternalStaffWidget from "@/components/InternalStaffWidget";
 import MajorTasksWidget from "@/components/MajorTasksWidget";
 import clsx from "clsx";
@@ -275,9 +274,6 @@ export default async function DashboardPage() {
           프로젝트 관리로 이동 <ArrowRight className="w-4 h-4" />
         </Link>
       </div>
-
-      {/* 내 근태/연차 위젯 (내부직원만 노출) */}
-      <MyLeaveAttendanceWidget />
 
       {/* 매출 하이라이트 + 사무실 근무현황 (2단 레이아웃) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">

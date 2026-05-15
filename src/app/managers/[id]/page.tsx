@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { ArrowLeft } from "lucide-react";
 import { serializeProject } from "@/lib/serialize";
+import MyLeaveAttendanceWidget from "@/components/MyLeaveAttendanceWidget";
 import PersonalDashboardClient from "./PersonalDashboardClient";
 
 export const dynamic = "force-dynamic";
@@ -123,6 +124,9 @@ export default async function ManagerDashboardPage({
           </Link>
         </div>
       </div>
+
+      {/* 내 근태/연차 — 본인이 자기 대시보드 볼 때만 표시 (위젯은 viewer 기준) */}
+      {isOwner && <MyLeaveAttendanceWidget />}
 
       <PersonalDashboardClient
         userId={user.id}
