@@ -72,12 +72,12 @@ export default function LoginForm() {
         {/* 로그인 폼 */}
         <form onSubmit={onSubmit} className="px-8 pb-8 pt-2 space-y-3">
           <div>
-            <label className="text-[11px] font-semibold text-slate-600 mb-1.5 block">아이디</label>
+            <label className="text-[11px] font-semibold text-slate-600 mb-1.5 block">아이디 (회사 이메일)</label>
             <input
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="사원번호 또는 ID"
+              placeholder="예: hjkim@daedongcmc.com"
               autoFocus
               required
               className="w-full h-11 px-3.5 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:border-brand-400 focus:ring-2 focus:ring-brand-200 outline-none text-sm transition"

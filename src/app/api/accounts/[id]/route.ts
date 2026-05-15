@@ -35,6 +35,27 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (body.clearPassword === true) {
     data.passwordHash = null;
   }
+  // 이메일 (로그인 ID) 변경
+  if (typeof body.email === "string") {
+    const newEmail = body.email.trim().toLowerCase();
+    if (newEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+      return NextResponse.json({ error: "올바른 이메일 형식이 아닙니다." }, { status: 400 });
+    }
+    // 중복 검사 (자기 자신 제외)
+    if (newEmail) {
+      const dup = await prisma.user.findFirst({
+        where: { email: newEmail, id: { not: params.id } },
+        select: { id: true, name: true },
+      });
+      if (dup) {
+        return NextResponse.json(
+          { error: `이미 같은 이메일을 사용하는 사용자가 있습니다 (${dup.name})` },
+          { status: 409 }
+        );
+      }
+    }
+    data.email = newEmail || null;
+  }
   if (Object.keys(data).length === 0) {
     return NextResponse.json({ error: "변경할 필드 없음" }, { status: 400 });
   }

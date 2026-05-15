@@ -109,6 +109,14 @@ export default function AccountsClient({
         </button>
       </div>
 
+      {/* 로그인 ID 안내 */}
+      <div className="mb-3 px-3 py-2 bg-brand-50/50 border border-brand-200 rounded-lg text-[11.5px] text-brand-800 flex items-start gap-2">
+        <KeyRound className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+        <span>
+          <strong>로그인 ID = 회사 이메일</strong> (@daedongcmc.com). 직원에게 비번을 발급할 때 표의「로그인 ID」컬럼을 알려주세요. 이메일이 미설정이면 우측 [비번/권한 변경]에서 입력할 수 있습니다.
+        </span>
+      </div>
+
       {/* 필터 */}
       <div className="flex flex-wrap items-center gap-2 mb-3 bg-white border border-slate-200 rounded-lg px-3 py-2">
         <div className="relative">
@@ -156,14 +164,15 @@ export default function AccountsClient({
           <thead className="bg-slate-50">
             <tr className="text-[11px] text-slate-500 font-medium border-b border-slate-200">
               <th className="text-left px-3 py-2.5 w-10">No</th>
-              <th className="text-left px-3 py-2.5 w-24">사원번호</th>
+              <th className="text-left px-3 py-2.5 w-20">사원번호</th>
               <th className="text-left px-3 py-2.5 w-24">성명</th>
-              <th className="text-left px-3 py-2.5 w-40">부서</th>
-              <th className="text-left px-3 py-2.5 w-28">직위</th>
-              <th className="text-center px-3 py-2.5 w-24">권한</th>
+              <th className="text-left px-3 py-2.5 w-72">로그인 ID (회사 이메일)</th>
+              <th className="text-left px-3 py-2.5 w-36">부서</th>
+              <th className="text-left px-3 py-2.5 w-24">직위</th>
+              <th className="text-center px-3 py-2.5 w-20">권한</th>
               <th className="text-center px-3 py-2.5 w-20">비밀번호</th>
               <th className="text-center px-3 py-2.5 w-20">상태</th>
-              <th className="text-center px-3 py-2.5 w-32">관리</th>
+              <th className="text-center px-3 py-2.5 w-28">관리</th>
             </tr>
           </thead>
           <tbody>
@@ -174,9 +183,18 @@ export default function AccountsClient({
               return (
                 <tr key={u.id} className="border-b border-slate-100 hover:bg-slate-50/70">
                   <td className="text-center text-[10px] text-slate-400 px-3 py-2">{i + 1}</td>
-                  <td className="px-3 py-2 font-mono text-[11px] text-brand-700 font-medium">{u.empNo}</td>
+                  <td className="px-3 py-2 font-mono text-[11px] text-slate-500">{u.empNo}</td>
                   <td className="px-3 py-2 font-medium text-slate-800">
                     {u.name} {isSelf && <span className="text-[10px] text-brand-600">(나)</span>}
+                  </td>
+                  <td className="px-3 py-2">
+                    {u.email ? (
+                      <span className="font-mono text-[11.5px] text-brand-700 font-medium select-all">
+                        {u.email}
+                      </span>
+                    ) : (
+                      <span className="text-[10.5px] text-rose-500 italic">미설정 — 관리 버튼에서 입력</span>
+                    )}
                   </td>
                   <td className="px-3 py-2 text-slate-700">{u.dept}</td>
                   <td className="px-3 py-2 text-slate-700">{u.position}</td>
@@ -217,7 +235,7 @@ export default function AccountsClient({
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={9} className="text-center py-12 text-slate-400 text-sm">
+                <td colSpan={10} className="text-center py-12 text-slate-400 text-sm">
                   조건에 맞는 계정이 없습니다
                 </td>
               </tr>
@@ -427,6 +445,7 @@ function EditAccountModal({
 }) {
   const [role, setRole] = useState(user.role);
   const [status, setStatus] = useState(user.status);
+  const [email, setEmail] = useState(user.email ?? "");
   const [newPassword, setNewPassword] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -463,6 +482,7 @@ function EditAccountModal({
     const data: any = {};
     if (role !== user.role) data.role = role;
     if (status !== user.status) data.status = status;
+    if ((email || "").trim() !== (user.email ?? "").trim()) data.email = email.trim();
     if (Object.keys(data).length === 0) return onClose();
     if (await patch(data)) onUpdated();
   }
@@ -487,6 +507,22 @@ function EditAccountModal({
           <span className="text-slate-500">현재 비밀번호</span>
           <span>{user.hasPassword ? "설정됨" : "미설정"}</span>
         </div>
+      </div>
+
+      {/* 로그인 ID (이메일) — 가장 중요 */}
+      <div className="mb-4 p-3 bg-brand-50/50 border border-brand-200 rounded-lg">
+        <Field label="로그인 ID (회사 이메일) ★">
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="예: hjkim@daedongcmc.com"
+            className="form-input font-mono"
+          />
+        </Field>
+        <p className="text-[10.5px] text-brand-700 mt-1.5">
+          이 이메일이 로그인 ID가 됩니다. 사원번호로도 로그인 가능하지만 이메일을 권장합니다.
+        </p>
       </div>
 
       {/* 권한/상태 */}
@@ -559,7 +595,7 @@ function EditAccountModal({
           className="h-9 px-4 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white text-sm font-medium rounded flex items-center gap-1.5"
         >
           {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-          권한·상태 저장
+          이메일·권한·상태 저장
         </button>
       </ModalFooter>
     </ModalShell>
