@@ -70,7 +70,19 @@ export default function MajorTasksWidgetClient({
 }) {
   const router = useRouter();
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
-  const [showForm, setShowForm] = useState(false);
+
+  // 목표일 기준 정렬 (null 은 맨 뒤)
+  function sortByTargetDate(arr: Task[]): Task[] {
+    return [...arr].sort((a, b) => {
+      if (!a.targetDate && !b.targetDate) return a.sortOrder - b.sortOrder;
+      if (!a.targetDate) return 1;
+      if (!b.targetDate) return -1;
+      const d = new Date(a.targetDate).getTime() - new Date(b.targetDate).getTime();
+      if (d !== 0) return d;
+      return a.sortOrder - b.sortOrder;
+    });
+  }
+  const sortedTasks = useMemo(() => sortByTargetDate(tasks), [tasks]);
 
   async function createTask(payload: any) {
     const res = await fetch("/api/major-tasks", {
@@ -84,7 +96,6 @@ export default function MajorTasksWidgetClient({
     }
     const created = await res.json();
     setTasks((prev) => [...prev, created]);
-    setShowForm(false);
   }
 
   async function patchTask(id: string, patch: Record<string, any>) {
@@ -132,16 +143,8 @@ export default function MajorTasksWidgetClient({
           >
             전체보기 <ArrowRight className="w-3 h-3" />
           </Link>
-          <button
-            onClick={() => setShowForm(true)}
-            className="h-7 px-2.5 bg-white hover:bg-amber-100 text-amber-700 border border-amber-200 text-[11px] font-medium rounded flex items-center gap-1"
-          >
-            <Plus className="w-3 h-3" /> 새로 만들기
-          </button>
         </div>
       </div>
-
-      {showForm && <TaskForm users={users} onCancel={() => setShowForm(false)} onSubmit={createTask} />}
 
       <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
         <table className="w-full text-[11.5px]">
@@ -159,23 +162,17 @@ export default function MajorTasksWidgetClient({
             </tr>
           </thead>
           <tbody>
-            {tasks.length === 0 ? (
-              <tr>
-                <td colSpan={9} className="text-center py-8 text-[12px] text-slate-400">
-                  표시할 주요 업무가 없습니다. "새로 만들기"를 눌러 추가하세요.
-                </td>
-              </tr>
-            ) : (
-              tasks.map((t) => (
-                <TaskRow
-                  key={t.id}
-                  task={t}
-                  users={users}
-                  onPatch={(p) => patchTask(t.id, p)}
-                  onDelete={() => deleteTask(t.id)}
-                />
-              ))
-            )}
+            {sortedTasks.map((t) => (
+              <TaskRow
+                key={t.id}
+                task={t}
+                users={users}
+                onPatch={(p) => patchTask(t.id, p)}
+                onDelete={() => deleteTask(t.id)}
+              />
+            ))}
+            {/* 인라인 신규 입력 행 — 항상 표 마지막에 위치 */}
+            <QuickAddTaskRow users={users} onCreate={createTask} />
           </tbody>
         </table>
       </div>
@@ -478,69 +475,125 @@ function AssigneeSelect({
   );
 }
 
-/* ─────────── 신규 폼 (간단) ─────────── */
+/* ─────────── 인라인 신규 입력 행 ─────────── */
 
-function TaskForm({
+function QuickAddTaskRow({
   users,
-  onCancel,
-  onSubmit,
+  onCreate,
 }: {
   users: User[];
-  onCancel: () => void;
-  onSubmit: (p: any) => void;
+  onCreate: (p: any) => Promise<void>;
 }) {
   const [category, setCategory] = useState("");
   const [title, setTitle] = useState("");
   const [targetDate, setTargetDate] = useState("");
-  const [status, setStatus] = useState("not_started");
   const [assigneeCode, setAssigneeCode] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
-  async function submit() {
-    if (!title.trim()) {
-      alert("업무명을 입력하세요");
-      return;
-    }
+  async function commit() {
+    if (!title.trim() || saving) return;
     setSaving(true);
     try {
-      const user = users.find((u) => u.pmCode === assigneeCode);
-      await onSubmit({
-        category: category || null,
+      const user = users.find((u) => u.pmCode === assigneeCode.trim());
+      await onCreate({
+        category: category.trim() || null,
         title: title.trim(),
         targetDate: targetDate || null,
-        status,
-        assigneeCode: assigneeCode || null,
+        status: "not_started",
+        assigneeCode: assigneeCode.trim() || null,
         assigneeId: user?.id ?? null,
-        notes: notes || null,
+        notes: notes.trim() || null,
       });
+      // 입력 초기화 → 새 빈 행이 다시 보임
+      setCategory("");
+      setTitle("");
+      setTargetDate("");
+      setAssigneeCode("");
+      setNotes("");
     } finally {
       setSaving(false);
     }
   }
 
+  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      // Enter → blur. blur 시 commit() 호출됨 (title 입력 시에만 onBlur 등록)
+      // 다른 필드(분류/담당자/기타)는 commit 직접 호출 (blur 등록 안됨)
+      const isTitleField = (e.currentTarget as HTMLInputElement).placeholder.includes("업무명");
+      if (!isTitleField && title.trim()) commit();
+      (e.target as HTMLInputElement).blur();
+    }
+  }
+
   return (
-    <div className="bg-white border border-amber-200 rounded-lg p-3 mb-3">
-      <div className="grid grid-cols-2 md:grid-cols-7 gap-2 items-end">
-        <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="분류 (용역/다미엑스 등)" className="h-7 px-2 text-[11.5px] border border-slate-200 rounded" />
-        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="업무명" className="md:col-span-2 h-7 px-2 text-[11.5px] border border-slate-200 rounded" autoFocus />
-        <input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} className="h-7 px-2 text-[11.5px] border border-slate-200 rounded" />
-        <select value={status} onChange={(e) => setStatus(e.target.value)} className="h-7 px-2 text-[11.5px] border border-slate-200 rounded bg-white">
-          {Object.entries(STATUS_META).map(([k, m]) => (
-            <option key={k} value={k}>{m.label}</option>
-          ))}
-        </select>
-        <input value={assigneeCode} onChange={(e) => setAssigneeCode(e.target.value)} placeholder="담당자 코드 (DHK 등)" className="h-7 px-2 text-[11.5px] border border-slate-200 rounded" />
-        <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="기타" className="h-7 px-2 text-[11.5px] border border-slate-200 rounded" />
-      </div>
-      <div className="flex justify-end gap-2 mt-2">
-        <button onClick={onCancel} className="h-7 px-3 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 text-[11px] font-medium rounded">
-          취소
+    <tr className="border-b border-slate-100 bg-amber-50/30 hover:bg-amber-50/60 transition">
+      <td className="px-2 py-1.5">
+        <input
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder="분류"
+          disabled={saving}
+          className="w-full h-6 px-1.5 text-[10.5px] bg-transparent focus:bg-white focus:ring-1 focus:ring-amber-300 outline-none rounded"
+        />
+      </td>
+      <td className="px-2 py-1.5">
+        <div className="flex items-center gap-1.5">
+          <Plus className="w-3 h-3 text-amber-500 shrink-0" />
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onBlur={commit}
+            onKeyDown={onKeyDown}
+            placeholder="새 업무명 입력 후 Enter (목표일 입력 시 자동 정렬)"
+            disabled={saving}
+            className="flex-1 h-6 px-1 text-[11.5px] font-medium bg-transparent focus:bg-white focus:ring-1 focus:ring-amber-300 outline-none rounded placeholder:text-amber-600 placeholder:font-normal"
+          />
+        </div>
+      </td>
+      <td className="px-2 py-1.5">
+        <input
+          type="date"
+          value={targetDate}
+          onChange={(e) => setTargetDate(e.target.value)}
+          disabled={saving}
+          className="w-full h-6 px-1 text-[10px] bg-transparent focus:bg-white focus:ring-1 focus:ring-amber-300 outline-none rounded tabular-nums"
+        />
+      </td>
+      <td className="px-2 py-1.5 text-slate-300 text-[10px]">—</td>
+      <td className="px-2 py-1.5 text-slate-300 text-[10px]">시작 전</td>
+      <td className="px-2 py-1.5">
+        <input
+          value={assigneeCode}
+          onChange={(e) => setAssigneeCode(e.target.value.toUpperCase())}
+          onKeyDown={onKeyDown}
+          placeholder="DHK"
+          disabled={saving}
+          className="w-full h-6 px-1 text-[10.5px] font-mono bg-transparent focus:bg-white focus:ring-1 focus:ring-amber-300 outline-none rounded"
+        />
+      </td>
+      <td className="px-2 py-1.5">
+        <input
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder="기타"
+          disabled={saving}
+          className="w-full h-6 px-1 text-[10.5px] bg-transparent focus:bg-white focus:ring-1 focus:ring-amber-300 outline-none rounded"
+        />
+      </td>
+      <td className="px-2 py-1.5 text-center">
+        <button
+          onClick={commit}
+          disabled={!title.trim() || saving}
+          title="추가 (또는 업무명에서 Enter)"
+          className="inline-flex w-5 h-5 items-center justify-center rounded bg-amber-100 hover:bg-amber-200 disabled:opacity-30 text-amber-700 transition"
+        >
+          {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
         </button>
-        <button onClick={submit} disabled={saving} className="h-7 px-3 bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white text-[11px] font-medium rounded flex items-center gap-1">
-          {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />} 추가
-        </button>
-      </div>
-    </div>
+      </td>
+      <td className="px-1 py-1.5"></td>
+    </tr>
   );
 }

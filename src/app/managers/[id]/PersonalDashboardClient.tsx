@@ -10,6 +10,7 @@ import {
   Target,
   CheckCircle2,
   Circle,
+  Check,
   Pencil,
   ArrowRightCircle,
   X,
@@ -383,7 +384,7 @@ export default function PersonalDashboardClient({
                             key={t.id}
                             className={clsx(
                               "text-[10.5px] leading-tight px-1 py-0.5 rounded flex items-center gap-1",
-                              isDone ? "text-slate-400 line-through" : "text-slate-700"
+                              isDone ? "text-slate-400" : "text-slate-700"
                             )}
                             title={t.title}
                           >
@@ -395,6 +396,9 @@ export default function PersonalDashboardClient({
                               <span className={clsx("w-1.5 h-1.5 rounded-full shrink-0", sm.dot)} />
                             )}
                             <span className="truncate">{t.title || "(빈 업무)"}</span>
+                            {isDone && (
+                              <Check className="w-2.5 h-2.5 text-emerald-500 shrink-0 ml-auto" />
+                            )}
                           </li>
                         );
                       })}
@@ -704,7 +708,7 @@ function TaskRow({
           value={task.title}
           onSave={(v) => onPatch({ title: v })}
           placeholder="업무명 입력..."
-          className={clsx("text-[11.5px]", isDone ? "text-slate-400 line-through" : "text-slate-800")}
+          className={clsx("text-[11.5px]", isDone ? "text-slate-400" : "text-slate-800")}
         />
       </td>
       <td
