@@ -27,16 +27,20 @@ export default async function MgmtFeesPage({
 
   const years = await prisma.mgmtFeeBudget.groupBy({ by: ["year"], _count: true });
   const yearList = years.map((y) => y.year).sort((a, b) => b - a);
-  const currentYear = searchParams.year ? Number(searchParams.year) : yearList[0] ?? new Date().getFullYear();
+
+  // 'year' 파라미터가 없거나 'all' 이면 전체보기 (기본). 숫자면 해당 연도만 필터.
+  const yearParam = searchParams.year;
+  const isAll = !yearParam || yearParam === "all";
+  const currentYear = isAll ? null : Number(yearParam);
 
   const budgets = await prisma.mgmtFeeBudget.findMany({
-    where: { year: currentYear },
+    where: currentYear == null ? {} : { year: currentYear },
     include: {
       clientCompany: { select: { id: true, name: true, repName: true } },
       project: { select: { id: true, title: true, displayCode: true, year: true } },
       expenses: { include: { vendorCompany: { select: { id: true, name: true } } }, orderBy: { seq: "asc" } },
     },
-    orderBy: [{ bizCategory: "asc" }, { seq: "asc" }],
+    orderBy: [{ year: "desc" }, { bizCategory: "asc" }, { seq: "asc" }],
   });
 
   const companies = await prisma.company.findMany({
@@ -45,7 +49,7 @@ export default async function MgmtFeesPage({
   });
 
   const projects = await prisma.project.findMany({
-    where: { year: currentYear },
+    where: currentYear == null ? {} : { year: currentYear },
     select: { id: true, title: true, displayCode: true, year: true, companyId: true },
     orderBy: { sortOrder: "asc" },
   });

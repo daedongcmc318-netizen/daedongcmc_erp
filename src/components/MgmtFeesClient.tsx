@@ -87,8 +87,9 @@ export default function MgmtFeesClient({
   companies: Company[];
   projects: Project[];
   years: number[];
-  currentYear: number;
+  currentYear: number | null; // null = 전체보기
 }) {
+  const isAll = currentYear == null;
   const router = useRouter();
   const [budgets, setBudgets] = useState<Budget[]>(initialBudgets);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -142,10 +143,12 @@ export default function MgmtFeesClient({
   async function createBudget() {
     const clientName = prompt("새 사업의 업체명을 입력하세요 (예: 제이오토26)");
     if (!clientName) return;
+    // 전체보기 모드에서는 올해 기준으로 생성
+    const targetYear = currentYear ?? new Date().getFullYear();
     const res = await fetch("/api/mgmt-fees", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ year: currentYear, clientName }),
+      body: JSON.stringify({ year: targetYear, clientName }),
     });
     if (!res.ok) {
       alert("생성 실패");
@@ -268,6 +271,17 @@ export default function MgmtFeesClient({
 
       {/* 연도 + 검색 */}
       <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <button
+          onClick={() => router.push(`/mgmt-fees`)}
+          className={clsx(
+            "min-w-[80px] px-3 h-8 text-xs font-semibold rounded-lg border transition",
+            isAll
+              ? "bg-slate-800 text-white border-slate-800 shadow-md"
+              : "bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:text-slate-800"
+          )}
+        >
+          전체보기
+        </button>
         {years.map((y) => (
           <button
             key={y}
@@ -282,7 +296,7 @@ export default function MgmtFeesClient({
             {y}년
           </button>
         ))}
-        {!years.includes(currentYear) && (
+        {currentYear != null && !years.includes(currentYear) && (
           <span className="text-[11px] text-slate-400 ml-2">※ {currentYear}년 데이터 없음</span>
         )}
         <input
@@ -460,35 +474,120 @@ function BudgetCard({
 
       {isOpen && (
         <div className="border-t border-slate-100 bg-slate-50/30">
-          {/* 예산 정보 */}
-          <div className="px-4 py-3 grid grid-cols-2 md:grid-cols-4 gap-3 border-b border-slate-100">
-            <BizCategorySelect
-              value={b.bizCategory}
-              onChange={(v) => onUpdate({ bizCategory: v })}
-            />
-            <FieldRow label="업체명 (시트)" value={b.clientName} onSave={(v) => onUpdate({ clientName: v })} />
-            <CompanyPicker
-              label="거래처 매칭"
-              value={b.clientCompanyId}
-              displayName={b.clientCompany?.name ?? null}
-              companies={companies}
-              onChange={(id) => onUpdate({ clientCompanyId: id })}
-            />
-            <ProjectPicker
-              label="연결 프로젝트"
-              value={b.projectId}
-              displayName={b.project?.title ?? null}
-              projects={projectOptions}
-              onChange={(id) => onUpdate({ projectId: id })}
-            />
-            <FieldRow label="관리비율" value={fmtPercent(b.mgmtFeeRate)} readOnly />
-            <MoneyRow label="정부보조금" value={b.subsidy} onSave={(v) => onUpdate({ subsidy: v })} />
-            <MoneyRow label="기업분담금" value={b.companyShare} onSave={(v) => onUpdate({ companyShare: v })} />
-            <MoneyRow label="과제총액" value={b.totalAmount} onSave={(v) => onUpdate({ totalAmount: v })} />
-            <MoneyRow label="관리비 (예산)" value={b.mgmtFeeAmount} onSave={(v) => onUpdate({ mgmtFeeAmount: v })} highlight />
-            <MoneyRow label="지급총액" value={b.payableTotal} onSave={(v) => onUpdate({ payableTotal: v })} />
-            <MoneyRow label="예산초과금" value={b.overBudget} onSave={(v) => onUpdate({ overBudget: v })} />
-            <FieldRow label="비고" value={b.notes ?? ""} onSave={(v) => onUpdate({ notes: v })} colSpan={2} />
+          {/* 매칭 정보 */}
+          <div className="px-4 pt-4 pb-2">
+            <SectionTitle>매칭 정보</SectionTitle>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+              <BizCategorySelect
+                value={b.bizCategory}
+                onChange={(v) => onUpdate({ bizCategory: v })}
+              />
+              <FieldRow label="업체명 (시트)" value={b.clientName} onSave={(v) => onUpdate({ clientName: v })} />
+              <CompanyPicker
+                label="거래처 매칭"
+                value={b.clientCompanyId}
+                displayName={b.clientCompany?.name ?? null}
+                companies={companies}
+                onChange={(id) => onUpdate({ clientCompanyId: id })}
+              />
+              <ProjectPicker
+                label="연결 프로젝트"
+                value={b.projectId}
+                displayName={b.project?.title ?? null}
+                projects={projectOptions}
+                onChange={(id) => onUpdate({ projectId: id })}
+              />
+            </div>
+          </div>
+
+          {/* 예산 패널 — 카드 3장 (과제 총예산 / 관리비 / 지출 현황) */}
+          <div className="px-4 py-3">
+            <SectionTitle>예산 구성</SectionTitle>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+              {/* 카드 1: 과제 총예산 (정부보조금 + 기업분담금) */}
+              <BudgetSummaryCard
+                title="과제 총예산"
+                tone="indigo"
+                main={{ label: "과제총액", value: b.totalAmount, onSave: (v) => onUpdate({ totalAmount: v }) }}
+                breakdown={[
+                  {
+                    label: "정부보조금",
+                    value: b.subsidy,
+                    onSave: (v) => onUpdate({ subsidy: v }),
+                    barColor: "bg-sky-500",
+                  },
+                  {
+                    label: "기업분담금",
+                    value: b.companyShare,
+                    onSave: (v) => onUpdate({ companyShare: v }),
+                    barColor: "bg-violet-500",
+                  },
+                ]}
+                totalRef={Number(b.totalAmount) || 0}
+              />
+
+              {/* 카드 2: 관리비 (예산) — 강조 */}
+              <BudgetSummaryCard
+                title="관리비 (예산)"
+                tone="brand"
+                highlight
+                main={{
+                  label: "관리비 예산",
+                  value: b.mgmtFeeAmount,
+                  onSave: (v) => onUpdate({ mgmtFeeAmount: v }),
+                }}
+                meta={[
+                  { label: "관리비율", value: fmtPercent(b.mgmtFeeRate) },
+                ]}
+              />
+
+              {/* 카드 3: 지출/잔액 */}
+              <BudgetSummaryCard
+                title="지출 현황"
+                tone="emerald"
+                main={{
+                  label: "지급총액",
+                  value: b.payableTotal,
+                  onSave: (v) => onUpdate({ payableTotal: v }),
+                }}
+                progressOf={{
+                  used: Number(b.payableTotal) || 0,
+                  total: Number(b.mgmtFeeAmount) || 0,
+                }}
+                meta={[
+                  {
+                    label: "예산초과금",
+                    value: Number(b.overBudget) > 0 ? fmtKRW(b.overBudget) : "—",
+                    danger: Number(b.overBudget) > 0,
+                  },
+                  {
+                    label: "잔액",
+                    value:
+                      (() => {
+                        const rem = (Number(b.mgmtFeeAmount) || 0) - (Number(b.payableTotal) || 0);
+                        return rem === 0 ? "—" : fmtKRW(rem);
+                      })(),
+                    danger: (Number(b.mgmtFeeAmount) || 0) - (Number(b.payableTotal) || 0) < 0,
+                    accent: (Number(b.mgmtFeeAmount) || 0) - (Number(b.payableTotal) || 0) > 0,
+                  },
+                ]}
+                editableMeta={{
+                  label: "예산초과금 (수동)",
+                  value: b.overBudget,
+                  onSave: (v) => onUpdate({ overBudget: v }),
+                }}
+              />
+            </div>
+
+            {/* 비고 */}
+            <div className="mt-3 bg-white border border-slate-200 rounded-lg p-3">
+              <div className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-1">비고</div>
+              <EditableText
+                value={b.notes ?? ""}
+                onSave={(v) => onUpdate({ notes: v })}
+                placeholder="메모를 입력하세요 (예: 정산 일정, 특이사항)"
+              />
+            </div>
           </div>
 
           {/* 지출 표 */}
@@ -623,6 +722,153 @@ function ExpenseRow({
 
 /* ──────── 인라인 편집 부품 ──────── */
 
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="text-[10.5px] text-slate-500 uppercase tracking-wider font-semibold mb-2">
+      {children}
+    </div>
+  );
+}
+
+function BudgetSummaryCard({
+  title,
+  tone,
+  highlight,
+  main,
+  breakdown,
+  totalRef,
+  progressOf,
+  meta,
+  editableMeta,
+}: {
+  title: string;
+  tone: "indigo" | "brand" | "emerald";
+  highlight?: boolean;
+  main: { label: string; value: string; onSave?: (v: number) => void };
+  breakdown?: { label: string; value: string; onSave: (v: number) => void; barColor: string }[];
+  totalRef?: number;
+  progressOf?: { used: number; total: number };
+  meta?: { label: string; value: string; danger?: boolean; accent?: boolean }[];
+  editableMeta?: { label: string; value: string; onSave: (v: number) => void };
+}) {
+  const palette = {
+    indigo: { ring: "ring-indigo-100", title: "text-indigo-700", num: "text-indigo-900" },
+    brand: { ring: "ring-brand-200", title: "text-brand-700", num: "text-brand-700" },
+    emerald: { ring: "ring-emerald-100", title: "text-emerald-700", num: "text-emerald-900" },
+  }[tone];
+
+  const usedPct =
+    progressOf && progressOf.total > 0
+      ? Math.min(150, (progressOf.used / progressOf.total) * 100)
+      : 0;
+  const isOver = progressOf && progressOf.used > progressOf.total && progressOf.total > 0;
+
+  return (
+    <div
+      className={clsx(
+        "bg-white border border-slate-200 rounded-xl p-3.5 flex flex-col gap-2.5 ring-1",
+        palette.ring,
+        highlight && "shadow-sm"
+      )}
+    >
+      <div className={clsx("text-[10.5px] font-semibold uppercase tracking-wider", palette.title)}>
+        {title}
+      </div>
+      {/* 메인 금액 */}
+      <div>
+        <div className="text-[10px] text-slate-400 mb-0.5">{main.label}</div>
+        {main.onSave ? (
+          <EditableMoney
+            value={main.value}
+            onSave={main.onSave}
+            highlight={highlight}
+            big
+          />
+        ) : (
+          <div className={clsx("text-xl font-bold tabular-nums", palette.num)}>
+            {fmtKRW(main.value)}
+          </div>
+        )}
+      </div>
+
+      {/* breakdown: stacked bar + 항목별 */}
+      {breakdown && totalRef !== undefined && (
+        <div className="space-y-1.5">
+          <div className="h-2 flex rounded-full overflow-hidden bg-slate-100">
+            {breakdown.map((b, i) => {
+              const v = Number(b.value) || 0;
+              const pct = totalRef > 0 ? (v / totalRef) * 100 : 0;
+              return <div key={i} className={b.barColor} style={{ width: `${pct}%` }} title={`${b.label}: ${fmtKRW(b.value)}`} />;
+            })}
+          </div>
+          <div className="grid grid-cols-1 gap-1">
+            {breakdown.map((b, i) => (
+              <div key={i} className="flex items-center justify-between text-[11px]">
+                <span className="inline-flex items-center gap-1.5 text-slate-600">
+                  <span className={clsx("w-1.5 h-1.5 rounded-sm", b.barColor)} />
+                  {b.label}
+                </span>
+                <EditableMoney value={b.value} onSave={b.onSave} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* progress bar (지출 / 예산) */}
+      {progressOf && (
+        <div className="space-y-1">
+          <div className={clsx("h-2 rounded-full overflow-hidden", isOver ? "bg-rose-100" : "bg-slate-100")}>
+            <div
+              className={clsx("h-full transition-all", isOver ? "bg-rose-500" : "bg-emerald-500")}
+              style={{ width: `${Math.min(100, usedPct)}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-[10px] text-slate-400 tabular-nums">
+            <span>예산 대비</span>
+            <span className={clsx(isOver && "text-rose-600 font-semibold")}>
+              {progressOf.total > 0 ? `${usedPct.toFixed(0)}%` : "—"}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* meta 키/값 */}
+      {meta && meta.length > 0 && (
+        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+          {meta.map((m, i) => (
+            <div key={i}>
+              <div className="text-[10px] text-slate-400 mb-0.5">{m.label}</div>
+              <div
+                className={clsx(
+                  "text-[12.5px] font-semibold tabular-nums",
+                  m.danger && "text-rose-600",
+                  m.accent && "text-emerald-700",
+                  !m.danger && !m.accent && "text-slate-700"
+                )}
+              >
+                {m.value}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* 편집 가능 meta (예산초과금 수동) */}
+      {editableMeta && (
+        <details className="text-[10.5px]">
+          <summary className="text-slate-400 cursor-pointer hover:text-slate-600 select-none">
+            {editableMeta.label} 직접 수정
+          </summary>
+          <div className="mt-1">
+            <EditableMoney value={editableMeta.value} onSave={editableMeta.onSave} />
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
+
 function FieldRow({
   label,
   value,
@@ -717,10 +963,12 @@ function EditableMoney({
   value,
   onSave,
   highlight,
+  big,
 }: {
   value: string;
   onSave: (v: number) => void;
   highlight?: boolean;
+  big?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value ?? "0"));
@@ -733,8 +981,9 @@ function EditableMoney({
           setEditing(true);
         }}
         className={clsx(
-          "cursor-text min-h-[20px] tabular-nums text-right text-[12px]",
-          highlight ? "text-brand-700 font-semibold" : "text-slate-700"
+          "cursor-text min-h-[20px] tabular-nums",
+          big ? "text-xl font-bold text-left" : "text-right text-[12px]",
+          highlight ? "text-brand-700 font-bold" : !big && "text-slate-700"
         )}
       >
         {n ? `₩${n.toLocaleString()}` : <span className="text-slate-300">—</span>}
