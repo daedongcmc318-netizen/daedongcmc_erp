@@ -500,88 +500,115 @@ function BudgetCard({
             </div>
           </div>
 
-          {/* 예산 패널 — 카드 3장 (과제 총예산 / 관리비 / 지출 현황) */}
-          <div className="px-4 py-3">
-            <SectionTitle>예산 구성</SectionTitle>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-              {/* 카드 1: 과제 총예산 (정부보조금 + 기업분담금) */}
-              <BudgetSummaryCard
-                title="과제 총예산"
-                tone="indigo"
-                main={{ label: "과제총액", value: b.totalAmount, onSave: (v) => onUpdate({ totalAmount: v }) }}
-                breakdown={[
-                  {
-                    label: "정부보조금",
-                    value: b.subsidy,
-                    onSave: (v) => onUpdate({ subsidy: v }),
-                    barColor: "bg-sky-500",
-                  },
-                  {
-                    label: "기업분담금",
-                    value: b.companyShare,
-                    onSave: (v) => onUpdate({ companyShare: v }),
-                    barColor: "bg-violet-500",
-                  },
-                ]}
-                totalRef={Number(b.totalAmount) || 0}
-              />
+          {/* 예산 구성 — 음영 박스 그리드 (라벨 상단, 값 하단) */}
+          <div className="px-4 py-3 space-y-3">
+            {/* 1행: 과제예산 + 분담 */}
+            <div>
+              <SectionTitle>과제 예산</SectionTitle>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <MoneyBox
+                  label="과제총액"
+                  value={b.totalAmount}
+                  onSave={(v) => onUpdate({ totalAmount: v })}
+                  tone="indigo"
+                  emphasize
+                />
+                <MoneyBox
+                  label="정부보조금"
+                  value={b.subsidy}
+                  onSave={(v) => onUpdate({ subsidy: v })}
+                  tone="sky"
+                />
+                <MoneyBox
+                  label="기업분담금"
+                  value={b.companyShare}
+                  onSave={(v) => onUpdate({ companyShare: v })}
+                  tone="violet"
+                />
+                <ReadonlyBox
+                  label="관리비율"
+                  value={fmtPercent(b.mgmtFeeRate)}
+                  tone="slate"
+                />
+              </div>
+              {/* stacked bar (정부보조금 + 기업분담금 = 과제총액) */}
+              {Number(b.totalAmount) > 0 && (
+                <div className="mt-2 h-1.5 flex rounded-full overflow-hidden bg-slate-100">
+                  <div
+                    className="bg-sky-500"
+                    style={{ width: `${(Number(b.subsidy) / Number(b.totalAmount)) * 100}%` }}
+                    title={`정부보조금 ${fmtKRW(b.subsidy)}`}
+                  />
+                  <div
+                    className="bg-violet-500"
+                    style={{ width: `${(Number(b.companyShare) / Number(b.totalAmount)) * 100}%` }}
+                    title={`기업분담금 ${fmtKRW(b.companyShare)}`}
+                  />
+                </div>
+              )}
+            </div>
 
-              {/* 카드 2: 관리비 (예산) — 강조 */}
-              <BudgetSummaryCard
-                title="관리비 (예산)"
-                tone="brand"
-                highlight
-                main={{
-                  label: "관리비 예산",
-                  value: b.mgmtFeeAmount,
-                  onSave: (v) => onUpdate({ mgmtFeeAmount: v }),
-                }}
-                meta={[
-                  { label: "관리비율", value: fmtPercent(b.mgmtFeeRate) },
-                ]}
-              />
-
-              {/* 카드 3: 지출/잔액 */}
-              <BudgetSummaryCard
-                title="지출 현황"
-                tone="emerald"
-                main={{
-                  label: "지급총액",
-                  value: b.payableTotal,
-                  onSave: (v) => onUpdate({ payableTotal: v }),
-                }}
-                progressOf={{
-                  used: Number(b.payableTotal) || 0,
-                  total: Number(b.mgmtFeeAmount) || 0,
-                }}
-                meta={[
-                  {
-                    label: "예산초과금",
-                    value: Number(b.overBudget) > 0 ? fmtKRW(b.overBudget) : "—",
-                    danger: Number(b.overBudget) > 0,
-                  },
-                  {
-                    label: "잔액",
-                    value:
-                      (() => {
-                        const rem = (Number(b.mgmtFeeAmount) || 0) - (Number(b.payableTotal) || 0);
-                        return rem === 0 ? "—" : fmtKRW(rem);
-                      })(),
-                    danger: (Number(b.mgmtFeeAmount) || 0) - (Number(b.payableTotal) || 0) < 0,
-                    accent: (Number(b.mgmtFeeAmount) || 0) - (Number(b.payableTotal) || 0) > 0,
-                  },
-                ]}
-                editableMeta={{
-                  label: "예산초과금 (수동)",
-                  value: b.overBudget,
-                  onSave: (v) => onUpdate({ overBudget: v }),
-                }}
-              />
+            {/* 2행: 관리비 + 지출 + 잔액 */}
+            <div>
+              <SectionTitle>관리비 · 지출</SectionTitle>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <MoneyBox
+                  label="관리비 (예산)"
+                  value={b.mgmtFeeAmount}
+                  onSave={(v) => onUpdate({ mgmtFeeAmount: v })}
+                  tone="brand"
+                  emphasize
+                />
+                <MoneyBox
+                  label="지급총액"
+                  value={b.payableTotal}
+                  onSave={(v) => onUpdate({ payableTotal: v })}
+                  tone="emerald"
+                />
+                <MoneyBox
+                  label="예산초과금"
+                  value={b.overBudget}
+                  onSave={(v) => onUpdate({ overBudget: v })}
+                  tone="rose"
+                />
+                {(() => {
+                  const rem = (Number(b.mgmtFeeAmount) || 0) - (Number(b.payableTotal) || 0);
+                  return (
+                    <ReadonlyBox
+                      label="잔액 (예산-지급)"
+                      value={rem === 0 ? "—" : fmtKRW(rem)}
+                      tone={rem < 0 ? "rose" : rem > 0 ? "emerald" : "slate"}
+                    />
+                  );
+                })()}
+              </div>
+              {/* 지출 진척도 */}
+              {Number(b.mgmtFeeAmount) > 0 && (
+                <div className="mt-2">
+                  <div className="flex justify-between text-[10px] text-slate-500 mb-0.5">
+                    <span>지출 진척도</span>
+                    <span className="tabular-nums">
+                      {((Number(b.payableTotal) / Number(b.mgmtFeeAmount)) * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                  <div className="h-1.5 rounded-full overflow-hidden bg-slate-100">
+                    <div
+                      className={clsx(
+                        "h-full",
+                        Number(b.payableTotal) > Number(b.mgmtFeeAmount) ? "bg-rose-500" : "bg-emerald-500"
+                      )}
+                      style={{
+                        width: `${Math.min(100, (Number(b.payableTotal) / Number(b.mgmtFeeAmount)) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* 비고 */}
-            <div className="mt-3 bg-white border border-slate-200 rounded-lg p-3">
-              <div className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-1">비고</div>
+            <div className="bg-amber-50/50 border border-amber-100 rounded-lg p-3">
+              <div className="text-[10px] text-amber-700 uppercase tracking-wider font-semibold mb-1">비고</div>
               <EditableText
                 value={b.notes ?? ""}
                 onSave={(v) => onUpdate({ notes: v })}
@@ -726,6 +753,148 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
     <div className="text-[10.5px] text-slate-500 uppercase tracking-wider font-semibold mb-2">
       {children}
+    </div>
+  );
+}
+
+type BoxTone = "indigo" | "sky" | "violet" | "brand" | "emerald" | "rose" | "amber" | "slate";
+
+const TONE_STYLE: Record<BoxTone, { wrap: string; label: string; value: string; ring: string }> = {
+  indigo: {
+    wrap: "bg-indigo-50/70 border-indigo-100",
+    label: "text-indigo-700",
+    value: "text-indigo-900",
+    ring: "ring-indigo-200",
+  },
+  sky: {
+    wrap: "bg-sky-50/70 border-sky-100",
+    label: "text-sky-700",
+    value: "text-sky-900",
+    ring: "ring-sky-200",
+  },
+  violet: {
+    wrap: "bg-violet-50/70 border-violet-100",
+    label: "text-violet-700",
+    value: "text-violet-900",
+    ring: "ring-violet-200",
+  },
+  brand: {
+    wrap: "bg-brand-50 border-brand-200",
+    label: "text-brand-700",
+    value: "text-brand-700",
+    ring: "ring-brand-300",
+  },
+  emerald: {
+    wrap: "bg-emerald-50/70 border-emerald-100",
+    label: "text-emerald-700",
+    value: "text-emerald-900",
+    ring: "ring-emerald-200",
+  },
+  rose: {
+    wrap: "bg-rose-50/70 border-rose-100",
+    label: "text-rose-700",
+    value: "text-rose-900",
+    ring: "ring-rose-200",
+  },
+  amber: {
+    wrap: "bg-amber-50/70 border-amber-100",
+    label: "text-amber-700",
+    value: "text-amber-900",
+    ring: "ring-amber-200",
+  },
+  slate: {
+    wrap: "bg-slate-50 border-slate-200",
+    label: "text-slate-500",
+    value: "text-slate-700",
+    ring: "ring-slate-300",
+  },
+};
+
+/** 음영 박스 — 라벨 상단, 금액 하단. 클릭 시 인플레이스 편집 */
+function MoneyBox({
+  label,
+  value,
+  onSave,
+  tone,
+  emphasize,
+}: {
+  label: string;
+  value: string;
+  onSave: (v: number) => void;
+  tone: BoxTone;
+  emphasize?: boolean;
+}) {
+  const s = TONE_STYLE[tone];
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(value ?? "0"));
+  const n = Number(value ?? 0);
+  return (
+    <div className={clsx("rounded-lg border px-3 py-2.5 transition", s.wrap, emphasize && "ring-1 " + s.ring)}>
+      <div className={clsx("text-[10.5px] font-semibold mb-1", s.label)}>{label}</div>
+      {editing ? (
+        <input
+          autoFocus
+          type="text"
+          inputMode="numeric"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value.replace(/[^\d]/g, ""))}
+          onBlur={() => {
+            const v = Number(draft || 0);
+            if (v !== n) onSave(v);
+            setEditing(false);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              const v = Number(draft || 0);
+              if (v !== n) onSave(v);
+              setEditing(false);
+            } else if (e.key === "Escape") {
+              setDraft(String(value ?? "0"));
+              setEditing(false);
+            }
+          }}
+          className={clsx(
+            "w-full px-1.5 py-0.5 text-[14px] tabular-nums font-bold bg-white border rounded outline-none",
+            s.ring,
+            "ring-2"
+          )}
+        />
+      ) : (
+        <div
+          onClick={() => {
+            setDraft(String(value ?? "0"));
+            setEditing(true);
+          }}
+          className={clsx(
+            "cursor-text tabular-nums",
+            emphasize ? "text-lg font-bold" : "text-[14px] font-semibold",
+            s.value
+          )}
+        >
+          {n ? `₩${n.toLocaleString()}` : <span className="text-slate-300 font-normal">—</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 음영 박스 (읽기전용 — 계산값) */
+function ReadonlyBox({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: BoxTone;
+}) {
+  const s = TONE_STYLE[tone];
+  return (
+    <div className={clsx("rounded-lg border px-3 py-2.5", s.wrap)}>
+      <div className={clsx("text-[10.5px] font-semibold mb-1", s.label)}>{label}</div>
+      <div className={clsx("text-[14px] font-semibold tabular-nums", s.value)}>
+        {value === "—" ? <span className="text-slate-300 font-normal">—</span> : value}
+      </div>
     </div>
   );
 }
