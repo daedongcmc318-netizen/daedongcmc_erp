@@ -65,6 +65,7 @@ model User {
   leaveApprovals     LeaveApproval[] @relation("LeaveApprovalApprover")
   leaveQuotas        UserLeaveQuota[]
   majorTasks         MajorTask[]      @relation("MajorTaskAssignee")
+  weeklyTasks        WeeklyTask[]
   educations         UserEducation[]
   certificates       Certificate[]    @relation("UserCertificates")
   managedConsultantPlans   ConsultantPlan[]       @relation("ConsultantPlanManager")
@@ -522,6 +523,30 @@ model MajorTask {
   @@index([completed])
   @@index([status])
   @@index([targetDate])
+}
+
+// 개인 주간 플래너 — 본인만 보고 편집 가능
+//   카테고리(마케팅/CRM/콘텐츠 등 자유), 우선순위(high/medium/low),
+//   진행상태(not_started/in_progress/review/done), 진행률(0~100), 메모
+model WeeklyTask {
+  id          String   @id @default(cuid())
+  userId      String
+  date        DateTime // YYYY-MM-DD 단위 (시각은 00:00 KST)
+  category    String?  // 마케팅 / CRM / 콘텐츠 / 영업 / 데이터분석 등
+  priority    String?  // high / medium / low
+  status      String   @default("not_started")
+  title       String
+  progress    Int      @default(0) // 0~100 %
+  notes       String?
+  completed   Boolean  @default(false)
+  sortOrder   Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+  @@index([userId, completed])
 }
 
 // 직원별 연도별 휴가 한도 (수동 설정 — getUserLeaveBalance에서 자동계산 대신 사용)

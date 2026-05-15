@@ -21,13 +21,21 @@ export default async function ManagersPage({
     _count: true,
   });
 
-  // 매니저 상세
-  const managerIds = grouped.map((g) => g.managerId!).filter(Boolean);
-  const managers = await prisma.user.findMany({
-    where: { id: { in: managerIds } },
+  // 매니저 카드 대상자
+  //   1) 올해 프로젝트가 있는 매니저
+  //   2) 내부직원(isInternal) 인 활성 직원 — 프로젝트가 없어도 본인 대시보드(주간 플래너) 사용 위해 노출
+  const projectManagerIds = grouped.map((g) => g.managerId!).filter(Boolean);
+  const allCandidates = await prisma.user.findMany({
+    where: {
+      status: "active",
+      OR: [
+        { id: { in: projectManagerIds } },
+        { isInternal: true },
+      ],
+    },
     select: { id: true, name: true, dept: true, position: true, pmCode: true, status: true },
   });
-  const mMap = new Map(managers.map((m) => [m.id, m]));
+  const mMap = new Map(allCandidates.map((m) => [m.id, m]));
 
   // 추가 정보 (진행중 / 사업영역별)
   const inProgressGroups = await prisma.project.groupBy({
@@ -55,17 +63,30 @@ export default async function ManagersPage({
     orderBy: { year: "desc" },
   });
 
-  const cards = grouped
-    .map((g) => {
-      const m = mMap.get(g.managerId!);
-      if (!m) return null;
-      const total = g._count;
-      const inProg = inProgressMap.get(g.managerId!) ?? 0;
-      const biz = bizMap.get(g.managerId!) ?? new Map();
-      return { manager: m, total, inProg, biz };
-    })
-    .filter((x): x is NonNullable<typeof x> => !!x)
-    .sort((a, b) => b.total - a.total);
+  // 카드 = (프로젝트 매니저) ∪ (내부직원 with no projects this year)
+  const projectIdSet = new Set(projectManagerIds);
+  const cards: {
+    manager: typeof allCandidates[0];
+    total: number;
+    inProg: number;
+    biz: Map<string, number>;
+  }[] = [];
+  for (const g of grouped) {
+    const m = mMap.get(g.managerId!);
+    if (!m) continue;
+    cards.push({
+      manager: m,
+      total: g._count,
+      inProg: inProgressMap.get(g.managerId!) ?? 0,
+      biz: bizMap.get(g.managerId!) ?? new Map(),
+    });
+  }
+  // 프로젝트 없는 내부직원 추가
+  for (const m of allCandidates) {
+    if (projectIdSet.has(m.id)) continue;
+    cards.push({ manager: m, total: 0, inProg: 0, biz: new Map() });
+  }
+  cards.sort((a, b) => b.total - a.total || a.manager.name.localeCompare(b.manager.name));
 
   const totalProjects = cards.reduce((s, c) => s + c.total, 0);
 
@@ -110,7 +131,7 @@ export default async function ManagersPage({
           {cards.map((c) => (
             <Link
               key={c.manager.id}
-              href={`/projects?year=${year}&manager=${c.manager.id}`}
+              href={`/managers/${c.manager.id}`}
               className="group bg-white rounded-2xl border border-slate-200/70 shadow-card hover:shadow-lg hover:border-brand-300 hover:-translate-y-0.5 transition p-5"
             >
               <div className="flex items-start justify-between mb-3">
