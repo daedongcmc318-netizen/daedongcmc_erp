@@ -75,11 +75,14 @@ export default function UsersClient({ initialUsers }: { initialUsers: User[] }) 
   const [creating, setCreating] = useState(false);
   const [printUser, setPrintUser] = useState<User | null>(null);
   const [certUser, setCertUser] = useState<{ user: User; type: "employment" | "career" } | null>(null);
+  // 상태 필터: '' = 전체, 'active' = 재직, 'inactive' = 퇴사, 'leave' = 휴직
+  const [filterStatus, setFilterStatus] = useState<string>("active");
 
   const filtered = useMemo(() => {
     return users.filter((u) => {
       if (filterDept && u.dept !== filterDept) return false;
       if (filterPosition && u.position !== filterPosition) return false;
+      if (filterStatus && u.status !== filterStatus) return false;
       if (search) {
         const q = search.toLowerCase();
         const hay = [u.name, u.empNo, u.email, u.dept, u.position, u.mobile, u.phone, u.accountNo]
@@ -90,7 +93,17 @@ export default function UsersClient({ initialUsers }: { initialUsers: User[] }) 
       }
       return true;
     });
-  }, [users, filterDept, filterPosition, search]);
+  }, [users, filterDept, filterPosition, filterStatus, search]);
+
+  const statusCounts = useMemo(() => {
+    const c = { active: 0, inactive: 0, leave: 0 };
+    for (const u of users) {
+      if (u.status === "active") c.active++;
+      else if (u.status === "inactive") c.inactive++;
+      else if (u.status === "leave") c.leave++;
+    }
+    return c;
+  }, [users]);
 
   async function handleSave(payload: Partial<User>, userId?: string) {
     if (userId) {
@@ -192,12 +205,27 @@ export default function UsersClient({ initialUsers }: { initialUsers: User[] }) 
             </option>
           ))}
         </select>
-        {(filterDept || filterPosition || search) && (
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+          className={clsx(
+            "h-7 text-xs px-2 rounded border bg-white cursor-pointer",
+            filterStatus ? "border-brand-300 text-brand-700 bg-brand-50" : "border-slate-200 text-slate-600"
+          )}
+          title="재직 상태"
+        >
+          <option value="">전체 ({users.length})</option>
+          <option value="active">재직 ({statusCounts.active})</option>
+          <option value="leave">휴직 ({statusCounts.leave})</option>
+          <option value="inactive">퇴사 ({statusCounts.inactive})</option>
+        </select>
+        {(filterDept || filterPosition || filterStatus !== "active" || search) && (
           <button
             className="text-[11px] text-slate-500 hover:text-slate-800 flex items-center gap-1 px-2 h-7"
             onClick={() => {
               setFilterDept("");
               setFilterPosition("");
+              setFilterStatus("active");
               setSearch("");
             }}
           >
@@ -215,6 +243,7 @@ export default function UsersClient({ initialUsers }: { initialUsers: User[] }) 
                 <th className="text-center px-2 py-2.5 w-10">No</th>
                 <th className="text-left px-2.5 py-2.5 w-24">사원번호</th>
                 <th className="text-left px-2.5 py-2.5 w-20">성명</th>
+                <th className="text-center px-2.5 py-2.5 w-16">상태</th>
                 <th className="text-left px-2.5 py-2.5 w-32">주민등록번호</th>
                 <th className="text-left px-2.5 py-2.5 w-40">부서명</th>
                 <th className="text-left px-2.5 py-2.5 w-28">직위/직급명</th>
@@ -235,7 +264,12 @@ export default function UsersClient({ initialUsers }: { initialUsers: User[] }) 
                 >
                   <td className="text-center text-[10px] text-slate-400 tabular-nums px-2 py-1.5">{i + 1}</td>
                   <td className="px-2.5 py-1.5 font-mono text-[11px] text-brand-700 font-medium">{u.empNo}</td>
-                  <td className="px-2.5 py-1.5 font-medium text-slate-800">{u.name}</td>
+                  <td className={clsx("px-2.5 py-1.5 font-medium", u.status === "inactive" ? "text-slate-400" : "text-slate-800")}>
+                    {u.name}
+                  </td>
+                  <td className="text-center px-2 py-1.5">
+                    <StatusBadge status={u.status} />
+                  </td>
                   <td className="px-2.5 py-1.5 font-mono text-[11px] text-slate-600 tabular-nums">{u.residentNo ? maskResident(u.residentNo) : "—"}</td>
                   <td className="px-2.5 py-1.5 text-slate-700">{u.dept}</td>
                   <td className="px-2.5 py-1.5 text-slate-700">{u.position}</td>
@@ -279,7 +313,7 @@ export default function UsersClient({ initialUsers }: { initialUsers: User[] }) 
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={12} className="text-center py-12 text-slate-400 text-sm">
+                  <td colSpan={13} className="text-center py-12 text-slate-400 text-sm">
                     표시할 직원이 없습니다
                   </td>
                 </tr>
@@ -316,5 +350,19 @@ export default function UsersClient({ initialUsers }: { initialUsers: User[] }) 
         />
       )}
     </div>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const meta: Record<string, { label: string; color: string }> = {
+    active: { label: "재직", color: "bg-emerald-100 text-emerald-700 ring-emerald-200" },
+    leave: { label: "휴직", color: "bg-amber-100 text-amber-700 ring-amber-200" },
+    inactive: { label: "퇴사", color: "bg-slate-200 text-slate-500 ring-slate-300" },
+  };
+  const m = meta[status] ?? { label: status, color: "bg-slate-100 text-slate-500 ring-slate-200" };
+  return (
+    <span className={clsx("inline-flex items-center text-[10px] px-1.5 py-0.5 rounded ring-1 font-medium", m.color)}>
+      {m.label}
+    </span>
   );
 }
