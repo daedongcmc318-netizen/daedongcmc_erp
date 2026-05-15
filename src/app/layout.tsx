@@ -60,7 +60,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <Sidebar role={user?.role ?? null} />
           <div className="flex flex-1 flex-col min-w-0">
             <Header user={user} />
-            <main className="flex-1 overflow-x-hidden">{children}</main>
+            <main className="flex-1 overflow-x-hidden pb-32">{children}</main>
           </div>
         </div>
       </body>
