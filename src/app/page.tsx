@@ -277,9 +277,6 @@ export default async function DashboardPage() {
       {/* 내 근태/연차 위젯 (내부직원만 노출) */}
       <MyLeaveAttendanceWidget />
 
-      {/* 주요 업무 진행현황 (노션 같은 핀 보드) */}
-      <MajorTasksWidget />
-
       {/* 매출 하이라이트 + 사무실 근무현황 (2단 레이아웃) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
         {/* 왼쪽: 매출 하이라이트 */}
@@ -346,6 +343,9 @@ export default async function DashboardPage() {
         {/* 오른쪽: 사무실 근무 현황 (내부직원만) */}
         <InternalStaffWidget />
       </div>
+
+      {/* 주요 업무 진행현황 (노션 같은 핀 보드) */}
+      <MajorTasksWidget />
 
       {/* KPI 4 카드 */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-5">
