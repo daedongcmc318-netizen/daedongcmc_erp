@@ -69,6 +69,17 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
   }
 
+  // 자동화 로직: 보고서 체크 → 상태 자동 변경
+  //   - midReportYn = true  → status = "mid_completed" (중간완료)  (사용자가 status를 직접 지정하지 않은 경우에만)
+  //   - finalReportYn = true → status = "review_pending" (수행확인요청)
+  //   - 체크 해제 시 자동 다운그레이드는 하지 않음 (실수 방지). 상태를 직접 수정해야 함.
+  if (data.midReportYn === true && !("status" in data)) {
+    data.status = "mid_completed";
+  }
+  if (data.finalReportYn === true && !("status" in data)) {
+    data.status = "review_pending";
+  }
+
   const updated = await prisma.project.update({
     where: { id: params.id },
     data,
