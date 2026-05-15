@@ -45,6 +45,7 @@ type Project = {
 type Category = { id: string; value: string; label: string; color: string | null };
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+const PLANNER_DAYS = 5; // 월~금만 표시
 
 const PRIORITY_META: Record<string, { label: string; dot: string; bg: string; text: string }> = {
   high: { label: "높음", dot: "bg-rose-500", bg: "bg-rose-50", text: "text-rose-700" },
@@ -103,20 +104,22 @@ export default function PersonalDashboardClient({
     return m;
   }, [categories]);
 
+  // weekStart 는 월요일 (서버에서 보내준 값). 5일 (월~금) 만 표시
   const weekStart = new Date(weekStartISO);
-  const days = Array.from({ length: 7 }, (_, i) => {
+  const days = Array.from({ length: PLANNER_DAYS }, (_, i) => {
     const d = new Date(weekStart);
     d.setDate(d.getDate() + i);
     return d;
   });
 
-  // 통계
+  // 통계 — 빈 placeholder (title 없음) 는 카운트 제외
   const stats = useMemo(() => {
-    const total = tasks.length;
-    const done = tasks.filter((t) => t.completed || t.status === "done").length;
-    const inProg = tasks.filter((t) => !t.completed && t.status === "in_progress").length;
-    const notStarted = tasks.filter((t) => !t.completed && t.status === "not_started").length;
-    const review = tasks.filter((t) => !t.completed && t.status === "review").length;
+    const realTasks = tasks.filter((t) => t.title.trim());
+    const total = realTasks.length;
+    const done = realTasks.filter((t) => t.completed || t.status === "done").length;
+    const inProg = realTasks.filter((t) => !t.completed && t.status === "in_progress").length;
+    const notStarted = realTasks.filter((t) => !t.completed && t.status === "not_started").length;
+    const review = realTasks.filter((t) => !t.completed && t.status === "review").length;
     const pct = total ? Math.round((done / total) * 100) : 0;
     return { total, done, inProg, notStarted, review, pct };
   }, [tasks]);
@@ -328,14 +331,14 @@ export default function PersonalDashboardClient({
               <StatCard label="완료율" value={`${stats.pct}%`} color="amber" />
             </div>
 
-            {/* 주간 달력 그리드 */}
-            <div className="grid grid-cols-7 gap-1 border-t border-slate-200 pt-3">
+            {/* 주간 달력 그리드 (월~금 5일) */}
+            <div className="grid grid-cols-5 gap-1 border-t border-slate-200 pt-3">
               {days.map((d, i) => {
-                const dayTasks = sortedTasks.filter((t) => sameDay(t.date, d));
+                // 빈 placeholder (title 없는 행) 은 캘린더에 표시하지 않음
+                const dayTasks = sortedTasks.filter((t) => sameDay(t.date, d) && t.title.trim());
                 const undone = dayTasks.filter((t) => !t.completed && t.status !== "done");
                 const isToday = sameDay(d, today);
                 const isPast = d < new Date(today.getFullYear(), today.getMonth(), today.getDate());
-                const isWeekend = i === 0 || i === 6;
                 return (
                   <div
                     key={i}
@@ -345,8 +348,8 @@ export default function PersonalDashboardClient({
                     )}
                   >
                     <div className="flex items-center justify-between mb-1.5">
-                      <div className={clsx("text-[10px] font-semibold", isWeekend && !isToday && "text-rose-500")}>
-                        {WEEKDAYS[i]}{" "}
+                      <div className="text-[10px] font-semibold">
+                        {WEEKDAYS[d.getDay()]}{" "}
                         <span className="text-[10.5px] text-slate-700 tabular-nums">
                           {d.getMonth() + 1}/{d.getDate()}
                         </span>
@@ -407,7 +410,9 @@ export default function PersonalDashboardClient({
 
           {/* 오늘 업무 리스트 (당일만 표시) */}
           {(() => {
-            const todayTasks = sortedTasks.filter((t) => sameDay(t.date, today));
+            const todayTasksAll = sortedTasks.filter((t) => sameDay(t.date, today));
+            // 빈 placeholder 행은 stats/카운트에서 제외, 표시는 항상 마지막에 한 줄
+            const todayTasks = todayTasksAll.filter((t) => t.title.trim());
             const todayUndone = todayTasks.filter((t) => !t.completed && t.status !== "done");
             return (
               <section className="bg-white border border-slate-200 rounded-2xl shadow-card overflow-hidden">
@@ -472,23 +477,38 @@ export default function PersonalDashboardClient({
                       </tr>
                     </thead>
                     <tbody>
-                      {todayTasks.length === 0 ? (
-                        <tr>
-                          <td colSpan={9} className="text-center py-12 text-slate-400 text-xs">
-                            오늘({fmtDate(today)}) 등록된 업무가 없습니다. 달력의 + 버튼 또는 우측 상단 [새 업무] 로 추가하세요.
-                          </td>
-                        </tr>
-                      ) : (
-                        todayTasks.map((t) => (
-                          <TaskRow
-                            key={t.id}
-                            task={t}
-                            categories={categories}
-                            onPatch={(p) => patchTask(t.id, p)}
-                            onDelete={() => delTask(t.id)}
-                          />
-                        ))
-                      )}
+                      {todayTasks.map((t) => (
+                        <TaskRow
+                          key={t.id}
+                          task={t}
+                          categories={categories}
+                          onPatch={(p) => patchTask(t.id, p)}
+                          onDelete={() => delTask(t.id)}
+                        />
+                      ))}
+                      {/* 가상 입력 행 — 항상 맨 마지막에 표시. 입력 시 실제 task 로 변환 */}
+                      <QuickAddRow
+                        categories={categories}
+                        dateISO={fmtDate(today)}
+                        onCreate={async (data) => {
+                          const res = await fetch(`/api/weekly-tasks`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              userId,
+                              date: data.date ?? fmtDate(today),
+                              dueDate: data.dueDate ?? fmtDate(today),
+                              title: data.title,
+                              category: data.category ?? null,
+                              status: "not_started",
+                            }),
+                          });
+                          if (res.ok) {
+                            const created: WeeklyTask = await res.json();
+                            setTasks((prev) => [...prev, created]);
+                          }
+                        }}
+                      />
                     </tbody>
                   </table>
                 </div>
@@ -795,6 +815,88 @@ function SelectBadge({
         </option>
       ))}
     </select>
+  );
+}
+
+/**
+ * 가상 입력 행 — DB에 저장되지 않은 빈 placeholder.
+ *   - 사용자가 업무명을 입력하고 blur/Enter 시 실제 WeeklyTask 로 생성
+ *   - 입력 안하면 DB에 흔적이 남지 않으므로 "다음날 자동 삭제" 효과
+ *   - 생성 후엔 자체 상태 초기화 → 새 빈 행이 다시 보임
+ */
+function QuickAddRow({
+  categories,
+  dateISO,
+  onCreate,
+}: {
+  categories: Category[];
+  dateISO: string;
+  onCreate: (data: {
+    title: string;
+    category?: string | null;
+    date?: string;
+    dueDate?: string;
+  }) => Promise<void>;
+}) {
+  const [title, setTitle] = useState("");
+  const [category, setCategory] = useState<string>("");
+  const [busy, setBusy] = useState(false);
+
+  async function commit() {
+    const t = title.trim();
+    if (!t) return; // 빈 값은 무시
+    if (busy) return;
+    setBusy(true);
+    try {
+      await onCreate({ title: t, category: category || null });
+      setTitle("");
+      setCategory("");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <tr className="border-b border-slate-100 bg-brand-50/20 hover:bg-brand-50/40 transition">
+      <td className="text-center px-2 py-1.5 text-slate-300">
+        <Plus className="w-3 h-3 inline" />
+      </td>
+      <td className="text-center px-2 py-1.5 text-[10px] text-slate-400 tabular-nums">
+        {dateISO.slice(5).replace("-", "/")}
+      </td>
+      <td className="text-center px-2 py-1.5">
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          className="text-[10.5px] px-1.5 py-0.5 rounded border border-transparent cursor-pointer outline-none focus:ring-1 focus:ring-brand-200 appearance-none w-full bg-white ring-1 ring-slate-200 text-slate-500"
+        >
+          <option value="">—</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.value}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+      </td>
+      <td className="text-center px-2 py-1.5 text-slate-300">—</td>
+      <td className="text-center px-2 py-1.5 text-slate-300">—</td>
+      <td className="px-3 py-1.5">
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          }}
+          placeholder="+ 새 업무명 입력 후 Enter (입력 안하면 저장 안됨)"
+          disabled={busy}
+          className="w-full bg-transparent focus:bg-white focus:ring-1 focus:ring-brand-200 outline-none rounded px-1 py-0.5 text-[11.5px] text-slate-800 placeholder:text-slate-400"
+        />
+      </td>
+      <td className="text-center px-2 py-1.5 text-slate-300 text-[10px]">자동</td>
+      <td className="px-3 py-1.5 text-slate-300">—</td>
+      <td className="text-center px-1 py-1.5 text-slate-300">—</td>
+    </tr>
   );
 }
 

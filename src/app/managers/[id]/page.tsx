@@ -9,11 +9,14 @@ import PersonalDashboardClient from "./PersonalDashboardClient";
 
 export const dynamic = "force-dynamic";
 
-// 주(週)의 일요일~토요일 범위 (KST)
+// 주(週)의 월~금 범위 (KST). 토/일은 위클리 플래너에서 제외
 function getWeekRange(d: Date): { start: Date; end: Date } {
-  const day = d.getDay(); // 0=일
-  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate() - day, 0, 0, 0);
-  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6, 23, 59, 59);
+  const day = d.getDay(); // 0=일 ~ 6=토
+  // 일요일(0) → 이전주 월요일 기준이 아니라 다음주 월요일? 한국 관습은 월요일 시작.
+  //   일요일이면 +1, 그 외는 -(day-1)
+  const offset = day === 0 ? 1 : -(day - 1);
+  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate() + offset, 0, 0, 0); // 월
+  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 4, 23, 59, 59); // 금
   return { start, end };
 }
 
@@ -71,6 +74,22 @@ export default async function ManagerDashboardPage({
   // 위클리 플래너 데이터 (본인/admin 만)
   let weeklyTasks: any[] = [];
   if (canSeeWeeklyPlanner) {
+    // 오늘 0시 기준
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    // 본인 대시보드일 때만 — 어제 이전의 '빈 placeholder' 자동 청소
+    //   title 이 빈 문자열인 행은 사용자가 입력 안 한 채 남겨둔 흔적이므로 안전 삭제
+    if (isOwner) {
+      await prisma.weeklyTask.deleteMany({
+        where: {
+          userId: user.id,
+          title: "",
+          date: { lt: todayStart },
+        },
+      });
+    }
+
     const tasks = await prisma.weeklyTask.findMany({
       where: { userId: user.id, date: { gte: weekStart, lte: weekEnd } },
       orderBy: [{ date: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
