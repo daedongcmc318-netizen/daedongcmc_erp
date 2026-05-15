@@ -87,6 +87,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
         icon: Clock,
         children: [
           { href: "/attendance/monthly", label: "근태현황", icon: CalendarDays },
+          { href: "/leaves/overview", label: "휴가현황", icon: CalendarDays },
         ],
       },
     ],
