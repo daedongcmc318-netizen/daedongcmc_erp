@@ -132,14 +132,14 @@ async function getDashboardData() {
     }),
   ]);
 
-  // 1주 이내 중간/완료 보고 마감 예정 (미완료만)
+  // 1주 이내 중간/완료 보고 마감 예정 (완료 포함 — D-day 옆에 '완료' 뱃지 표시)
   const upcomingMid = await prisma.project.findMany({
-    where: { midReportDate: { gte: today, lte: weekLater }, midReportYn: false },
+    where: { midReportDate: { gte: today, lte: weekLater } },
     include: { manager: { select: { name: true, pmCode: true } } },
     orderBy: { midReportDate: "asc" },
   });
   const upcomingFinal = await prisma.project.findMany({
-    where: { finalReportDate: { gte: today, lte: weekLater }, finalReportYn: false },
+    where: { finalReportDate: { gte: today, lte: weekLater } },
     include: { manager: { select: { name: true, pmCode: true } } },
     orderBy: { finalReportDate: "asc" },
   });
@@ -148,11 +148,13 @@ async function getDashboardData() {
       kind: "mid" as const,
       project: p,
       date: p.midReportDate!,
+      done: p.midReportYn,
     })),
     ...upcomingFinal.map((p) => ({
       kind: "final" as const,
       project: p,
       date: p.finalReportDate!,
+      done: p.finalReportYn,
     })),
   ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
@@ -501,6 +503,7 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 type UpcomingItem = {
   kind: "mid" | "final";
   date: Date | string;
+  done: boolean;
   project: {
     id: string;
     title: string;
@@ -624,14 +627,21 @@ function UpcomingReports({ items, todayMs }: { items: UpcomingItem[]; todayMs: n
                       )}
                     </td>
                     <td className="px-3 py-2">
-                      <span
-                        className={clsx(
-                          "px-1.5 py-0.5 rounded text-[10px] font-bold tabular-nums whitespace-nowrap",
-                          urgency
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={clsx(
+                            "px-1.5 py-0.5 rounded text-[10px] font-bold tabular-nums whitespace-nowrap",
+                            it.done ? "bg-slate-100 text-slate-500 line-through" : urgency
+                          )}
+                        >
+                          {dday}
+                        </span>
+                        {it.done && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 whitespace-nowrap">
+                            ✓ 완료
+                          </span>
                         )}
-                      >
-                        {dday}
-                      </span>
+                      </div>
                     </td>
                   </tr>
                 );
