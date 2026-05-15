@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { X, Printer, Save, Loader2, FileText, History as HistoryIcon, Trash2 } from "lucide-react";
 import type { User } from "./UsersClient";
+import { maskResident } from "@/lib/format";
 
 type CertType = "employment" | "career";
 
@@ -36,12 +37,6 @@ function fmtKDateDot(d: string | Date | null | undefined): string {
   return `${dt.getFullYear()}년 ${String(dt.getMonth() + 1).padStart(2, "0")}월 ${String(dt.getDate()).padStart(2, "0")}일`;
 }
 
-function maskResident(r: string | null | undefined): string {
-  if (!r) return "";
-  const m = r.match(/^(\d{6})-?(\d)/);
-  if (!m) return r;
-  return `${m[1]}-${m[2]}******`;
-}
 
 export default function CertificateModal({
   user,

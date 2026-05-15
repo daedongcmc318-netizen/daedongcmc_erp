@@ -6,6 +6,7 @@ import clsx from "clsx";
 import UserModal from "@/components/UserModal";
 import EmployeeCardModal from "@/components/EmployeeCardModal";
 import CertificateModal from "@/components/CertificateModal";
+import { maskResident } from "@/lib/format";
 
 export type User = {
   id: string;
@@ -235,7 +236,7 @@ export default function UsersClient({ initialUsers }: { initialUsers: User[] }) 
                   <td className="text-center text-[10px] text-slate-400 tabular-nums px-2 py-1.5">{i + 1}</td>
                   <td className="px-2.5 py-1.5 font-mono text-[11px] text-brand-700 font-medium">{u.empNo}</td>
                   <td className="px-2.5 py-1.5 font-medium text-slate-800">{u.name}</td>
-                  <td className="px-2.5 py-1.5 font-mono text-[11px] text-slate-600 tabular-nums">{u.residentNo ?? "—"}</td>
+                  <td className="px-2.5 py-1.5 font-mono text-[11px] text-slate-600 tabular-nums">{u.residentNo ? maskResident(u.residentNo) : "—"}</td>
                   <td className="px-2.5 py-1.5 text-slate-700">{u.dept}</td>
                   <td className="px-2.5 py-1.5 text-slate-700">{u.position}</td>
                   <td className="px-2.5 py-1.5 font-mono text-[11px] text-slate-600 tabular-nums">{fmtDate(u.joinDate)}</td>

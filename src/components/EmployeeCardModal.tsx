@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef } from "react";
 import { X, Printer, Plus, Trash2, Loader2 } from "lucide-react";
 import type { User } from "./UsersClient";
+import { maskResident } from "@/lib/format";
 
 type Education = {
   id: string;
@@ -24,13 +25,6 @@ function fmtDate(d: string | null | undefined): string {
   if (!d) return "";
   const s = typeof d === "string" ? d.slice(0, 10) : "";
   return s.replaceAll("-", "/");
-}
-
-function maskResident(r: string | null | undefined): string {
-  if (!r) return "";
-  const m = r.match(/^(\d{6})-?(\d)/);
-  if (!m) return r;
-  return `${m[1]}-${m[2]}******`;
 }
 
 function birthFromResident(r: string | null | undefined): string {
