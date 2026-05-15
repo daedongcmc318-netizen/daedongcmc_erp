@@ -149,15 +149,21 @@ export default function Sidebar({ role }: { role: string | null }) {
 
   return (
     <aside className="w-60 shrink-0 border-r border-slate-200 bg-white">
-      <div className="flex h-14 items-center gap-2 border-b border-slate-200 px-5">
-        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-brand-600 text-white font-bold text-sm">
+      <Link
+        href="/"
+        className="flex h-14 items-center gap-2 border-b border-slate-200 px-5 hover:bg-slate-50 transition group"
+        title="대시보드로 이동"
+      >
+        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-brand-600 group-hover:bg-brand-700 text-white font-bold text-sm transition">
           D
         </div>
         <div className="leading-tight">
-          <div className="text-[13px] font-semibold tracking-tight">대동CMC</div>
+          <div className="text-[13px] font-semibold tracking-tight group-hover:text-brand-700 transition">
+            대동CMC
+          </div>
           <div className="text-[10px] text-slate-500">통합 ERP</div>
         </div>
-      </div>
+      </Link>
       <nav className="px-3 py-4 space-y-5">
         {NAV.map((section) => (
           <div key={section.group}>
