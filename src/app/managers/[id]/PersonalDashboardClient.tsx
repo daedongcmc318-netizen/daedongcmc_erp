@@ -132,10 +132,18 @@ export default function PersonalDashboardClient({
 
   async function addTask(dateISO: string) {
     if (!canSeeWeeklyPlanner) return;
+    // 마감일자 기본값 = 오늘. 필요 시 row 에서 직접 수정.
+    const todayISO = fmtDate(new Date());
     const res = await fetch(`/api/weekly-tasks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, date: dateISO, title: "", status: "not_started" }),
+      body: JSON.stringify({
+        userId,
+        date: dateISO,
+        dueDate: todayISO,
+        title: "",
+        status: "not_started",
+      }),
     });
     if (!res.ok) return;
     const created: WeeklyTask = await res.json();
