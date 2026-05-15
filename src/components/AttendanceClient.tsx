@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Clock, LogIn, LogOut, AlertTriangle, Calendar } from "lucide-react";
+import { Clock, LogIn, LogOut, AlertTriangle, Calendar, Pencil, Trash2, X, Check, Loader2 } from "lucide-react";
 import clsx from "clsx";
 
 type Attendance = {
@@ -52,7 +52,7 @@ export default function AttendanceClient({
   today: initialToday,
   records: initialRecords,
 }: {
-  me: { id: string; name: string; dept: string; position: string; isInternal: boolean };
+  me: { id: string; name: string; dept: string; position: string; isInternal: boolean; role: string };
   today: Attendance | null;
   records: Attendance[];
 }) {
@@ -60,6 +60,45 @@ export default function AttendanceClient({
   const [today, setToday] = useState<Attendance | null>(initialToday);
   const [records, setRecords] = useState<Attendance[]>(initialRecords);
   const [now, setNow] = useState(new Date());
+  const [editing, setEditing] = useState<Attendance | null>(null);
+  const isAdmin = me.role === "admin";
+
+  async function deleteAttendance(id: string) {
+    if (!confirm("이 근태 기록을 삭제하시겠습니까? 되돌릴 수 없습니다.")) return;
+    const res = await fetch(`/api/attendance/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      alert(j.error ?? "삭제 실패");
+      return;
+    }
+    setRecords((prev) => prev.filter((r) => r.id !== id));
+    if (today && today.id === id) setToday(null);
+    router.refresh();
+  }
+
+  async function saveEdit(patch: {
+    checkIn?: string | null;
+    checkOut?: string | null;
+    status?: string;
+    notes?: string | null;
+  }) {
+    if (!editing) return;
+    const res = await fetch(`/api/attendance/${editing.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      alert(j.error ?? "수정 실패");
+      return;
+    }
+    const updated = await res.json();
+    setRecords((prev) => prev.map((r) => (r.id === editing.id ? { ...r, ...updated } : r)));
+    if (today && today.id === editing.id) setToday({ ...today, ...updated });
+    setEditing(null);
+    router.refresh();
+  }
 
   // 실시간 시계
   useEffect(() => {
@@ -206,8 +245,13 @@ export default function AttendanceClient({
 
       {/* 근태 내역 표 */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-200">
+        <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-slate-700">최근 30일 근태 내역</h2>
+          {isAdmin && (
+            <span className="text-[10.5px] bg-rose-50 text-rose-700 ring-1 ring-rose-200 px-1.5 py-0.5 rounded">
+              관리자 권한 — 수정/삭제 가능
+            </span>
+          )}
         </div>
         {records.length === 0 ? (
           <div className="py-12 text-center text-sm text-slate-400">근태 기록이 없습니다</div>
@@ -221,7 +265,8 @@ export default function AttendanceClient({
                 <th className="text-left px-3 py-2 border-b border-r border-slate-200 w-24">퇴근</th>
                 <th className="text-left px-3 py-2 border-b border-r border-slate-200 w-28">근무시간</th>
                 <th className="text-left px-3 py-2 border-b border-r border-slate-200 w-32">출근 IP</th>
-                <th className="text-left px-3 py-2 border-b border-slate-200">메모</th>
+                <th className="text-left px-3 py-2 border-b border-r border-slate-200">메모</th>
+                {isAdmin && <th className="text-center px-2 py-2 border-b border-slate-200 w-20">관리</th>}
               </tr>
             </thead>
             <tbody>
@@ -229,7 +274,7 @@ export default function AttendanceClient({
                 const sm = STATUS_META[r.status] ?? { label: r.status, color: "bg-slate-100 text-slate-600" };
                 const weekend = ["일", "토"].includes(getWeekday(r.date));
                 return (
-                  <tr key={r.id} className={clsx("hover:bg-slate-50/60", weekend && "bg-slate-50/30")}>
+                  <tr key={r.id} className={clsx("group hover:bg-slate-50/60", weekend && "bg-slate-50/30")}>
                     <td className="px-3 py-1.5 border-b border-r border-slate-100 tabular-nums">
                       <span className={clsx("font-mono", weekend && "text-rose-600")}>
                         {r.date.slice(0, 10)} ({getWeekday(r.date)})
@@ -248,15 +293,151 @@ export default function AttendanceClient({
                     <td className="px-3 py-1.5 border-b border-r border-slate-100 text-[10px] text-slate-400">
                       {r.checkInIp ?? "—"}
                     </td>
-                    <td className="px-3 py-1.5 border-b border-slate-100 text-slate-500 text-[11px]">
+                    <td className="px-3 py-1.5 border-b border-r border-slate-100 text-slate-500 text-[11px]">
                       {r.notes ?? "—"}
                     </td>
+                    {isAdmin && (
+                      <td className="px-2 py-1.5 border-b border-slate-100 text-center">
+                        <div className="inline-flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition">
+                          <button
+                            onClick={() => setEditing(r)}
+                            className="w-6 h-6 rounded text-slate-400 hover:text-brand-600 hover:bg-brand-50 inline-flex items-center justify-center"
+                            title="수정"
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => deleteAttendance(r.id)}
+                            className="w-6 h-6 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 inline-flex items-center justify-center"
+                            title="삭제"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
             </tbody>
           </table>
         )}
+      </div>
+
+      {/* admin 수정 모달 */}
+      {editing && isAdmin && (
+        <EditModal record={editing} onClose={() => setEditing(null)} onSave={saveEdit} />
+      )}
+    </div>
+  );
+}
+
+function EditModal({
+  record,
+  onClose,
+  onSave,
+}: {
+  record: Attendance;
+  onClose: () => void;
+  onSave: (patch: { checkIn?: string | null; checkOut?: string | null; status?: string; notes?: string | null }) => void;
+}) {
+  const [checkIn, setCheckIn] = useState(record.checkIn ?? "");
+  const [checkOut, setCheckOut] = useState(record.checkOut ?? "");
+  const [status, setStatus] = useState(record.status);
+  const [notes, setNotes] = useState(record.notes ?? "");
+  const [saving, setSaving] = useState(false);
+
+  function toLocalDateTime(iso: string): string {
+    if (!iso) return "";
+    const d = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  async function submit() {
+    setSaving(true);
+    try {
+      await onSave({
+        checkIn: checkIn ? new Date(checkIn).toISOString() : null,
+        checkOut: checkOut ? new Date(checkOut).toISOString() : null,
+        status,
+        notes: notes || null,
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-slate-900/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold flex items-center gap-1.5">
+            <Pencil className="w-3.5 h-3.5 text-brand-500" />
+            근태 기록 수정 <span className="text-[10px] text-rose-600 ml-1">(admin)</span>
+          </h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="text-[11px] text-slate-500 mb-3 font-mono">{record.date.slice(0, 10)}</div>
+        <div className="space-y-3">
+          <div>
+            <label className="text-[10px] text-slate-400">출근</label>
+            <input
+              type="datetime-local"
+              value={toLocalDateTime(checkIn)}
+              onChange={(e) => setCheckIn(e.target.value)}
+              className="w-full h-8 px-2 text-[12px] border border-slate-200 rounded outline-none focus:border-brand-300"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] text-slate-400">퇴근</label>
+            <input
+              type="datetime-local"
+              value={toLocalDateTime(checkOut)}
+              onChange={(e) => setCheckOut(e.target.value)}
+              className="w-full h-8 px-2 text-[12px] border border-slate-200 rounded outline-none focus:border-brand-300"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] text-slate-400">상태</label>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              className="w-full h-8 px-2 text-[12px] border border-slate-200 rounded bg-white outline-none focus:border-brand-300"
+            >
+              <option value="working">근무</option>
+              <option value="business_trip">출장</option>
+              <option value="off">휴무</option>
+              <option value="leave">휴가</option>
+              <option value="half_am">오전반차</option>
+              <option value="half_pm">오후반차</option>
+              <option value="absent">결근</option>
+              <option value="holiday">공휴일</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] text-slate-400">메모</label>
+            <input
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="w-full h-8 px-2 text-[12px] border border-slate-200 rounded outline-none focus:border-brand-300"
+            />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 mt-4">
+          <button onClick={onClose} className="h-8 px-3 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 text-[12px] font-medium rounded">
+            취소
+          </button>
+          <button
+            onClick={submit}
+            disabled={saving}
+            className="h-8 px-3 bg-brand-600 hover:bg-brand-700 text-white text-[12px] font-medium rounded flex items-center gap-1"
+          >
+            {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} 저장
+          </button>
+        </div>
       </div>
     </div>
   );

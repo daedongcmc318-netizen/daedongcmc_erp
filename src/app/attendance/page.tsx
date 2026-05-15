@@ -47,7 +47,7 @@ export default async function AttendancePage() {
 
   return (
     <AttendanceClient
-      me={{ ...myUser, isInternal: effectiveInternal }}
+      me={{ ...myUser, isInternal: effectiveInternal, role: me.role }}
       today={today ? serialize(today) : null}
       records={serialize(records)}
     />
