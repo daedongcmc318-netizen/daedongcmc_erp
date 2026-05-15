@@ -6,7 +6,8 @@ import clsx from "clsx";
 
 type TrackRecord = {
   id: string;
-  type: "innovation" | "export";
+  type: "innovation" | "export" | string;
+  category: string | null;
   seqNo: number | null;
   serviceName: string;
   serviceFee: string;
@@ -101,6 +102,7 @@ export default function TrackRecordsClient({
   const [filterYear, setFilterYear] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterProgram, setFilterProgram] = useState("");
+  const [filterCategory, setFilterCategory] = useState("");
   const [pickerFor, setPickerFor] = useState<string | null>(null);
 
   const tabRecords = useMemo(() => records.filter((r) => r.type === tab), [records, tab]);
@@ -110,6 +112,10 @@ export default function TrackRecordsClient({
       if (filterYear && String(r.year) !== filterYear) return false;
       if (filterStatus && r.status !== filterStatus) return false;
       if (filterProgram && r.supportProgram !== filterProgram) return false;
+      if (filterCategory) {
+        if (filterCategory === "_null" && r.category) return false;
+        else if (filterCategory !== "_null" && r.category !== filterCategory) return false;
+      }
       if (search.trim()) {
         const q = search.toLowerCase();
         const hay = [
@@ -129,7 +135,17 @@ export default function TrackRecordsClient({
       }
       return true;
     });
-  }, [tabRecords, search, filterYear, filterStatus, filterProgram]);
+  }, [tabRecords, search, filterYear, filterStatus, filterProgram, filterCategory]);
+
+  const categoryCounts = useMemo(() => {
+    const c: Record<string, number> = { consulting: 0, tech_support: 0, marketing: 0, service: 0, certification: 0, etc: 0, _null: 0 };
+    for (const r of tabRecords) {
+      if (!r.category) c._null++;
+      else if (c[r.category] !== undefined) c[r.category]++;
+      else c.etc++;
+    }
+    return c;
+  }, [tabRecords]);
 
   const totalFee = useMemo(
     () => filtered.reduce((acc, r) => acc + Number(r.serviceFee ?? 0), 0),
@@ -248,13 +264,28 @@ export default function TrackRecordsClient({
           </>
         )}
         <FilterSelect value={filterStatus} onChange={setFilterStatus} label="진행상태" options={usedStatuses.map((s) => ({ value: s, label: s }))} />
-        {(search || filterYear || filterStatus || filterProgram) && (
+        <FilterSelect
+          value={filterCategory}
+          onChange={setFilterCategory}
+          label="카테고리"
+          options={[
+            { value: "consulting", label: `컨설팅 (${categoryCounts.consulting})` },
+            { value: "tech_support", label: `기술지원 (${categoryCounts.tech_support})` },
+            { value: "marketing", label: `마케팅 (${categoryCounts.marketing})` },
+            { value: "service", label: `용역 (${categoryCounts.service})` },
+            { value: "certification", label: `인증 (${categoryCounts.certification})` },
+            { value: "etc", label: `기타 (${categoryCounts.etc})` },
+            { value: "_null", label: `미분류 (${categoryCounts._null})` },
+          ]}
+        />
+        {(search || filterYear || filterStatus || filterProgram || filterCategory) && (
           <button
             onClick={() => {
               setSearch("");
               setFilterYear("");
               setFilterStatus("");
               setFilterProgram("");
+              setFilterCategory("");
             }}
             className="text-[11px] text-slate-500 hover:text-slate-800 flex items-center gap-1 px-2 h-7"
           >
@@ -394,6 +425,7 @@ function ExportTable({
       <thead className="bg-slate-50 sticky top-0 z-10">
         <tr className="text-slate-500 text-[10.5px] font-medium">
           <Th className="w-12">#</Th>
+          <Th className="w-20">카테고리</Th>
           <Th className="w-44">서비스명</Th>
           <Th className="w-28">서비스요금</Th>
           <Th className="w-28">처리금액</Th>
@@ -414,7 +446,7 @@ function ExportTable({
       <tbody>
         {records.length === 0 ? (
           <tr>
-            <td colSpan={16} className="text-center py-12 text-sm text-slate-400">
+            <td colSpan={17} className="text-center py-12 text-sm text-slate-400">
               표시할 실적이 없습니다
             </td>
           </tr>
@@ -422,6 +454,9 @@ function ExportTable({
           records.map((r) => (
             <tr key={r.id} className="group hover:bg-slate-50/60 border-b border-slate-100">
               <Td className="font-mono text-[10px] text-slate-400 tabular-nums">{r.seqNo ?? "—"}</Td>
+              <Td>
+                <CategorySelect value={r.category} onChange={(v) => onPatch(r.id, { category: v })} />
+              </Td>
               <Td>
                 <InlineText value={r.serviceName} onSave={(v) => onPatch(r.id, { serviceName: v })} />
               </Td>
@@ -539,6 +574,7 @@ function InnovationTable({
       <thead className="bg-slate-50 sticky top-0 z-10">
         <tr className="text-slate-500 text-[10.5px] font-medium">
           <Th className="w-12">#</Th>
+          <Th className="w-20">카테고리</Th>
           <Th>서비스명</Th>
           <Th className="w-32">서비스이용금액</Th>
           <Th className="w-24">요금형태</Th>
@@ -554,7 +590,7 @@ function InnovationTable({
       <tbody>
         {records.length === 0 ? (
           <tr>
-            <td colSpan={11} className="text-center py-12 text-sm text-slate-400">
+            <td colSpan={12} className="text-center py-12 text-sm text-slate-400">
               표시할 실적이 없습니다
             </td>
           </tr>
@@ -562,6 +598,9 @@ function InnovationTable({
           records.map((r) => (
             <tr key={r.id} className="group hover:bg-slate-50/60 border-b border-slate-100">
               <Td className="font-mono text-[10px] text-slate-400 tabular-nums">{r.seqNo ?? "—"}</Td>
+              <Td>
+                <CategorySelect value={r.category} onChange={(v) => onPatch(r.id, { category: v })} />
+              </Td>
               <Td>
                 <InlineText value={r.serviceName} onSave={(v) => onPatch(r.id, { serviceName: v })} />
               </Td>
@@ -1038,5 +1077,41 @@ function InvoicePickerModal({
         </div>
       </div>
     </div>
+  );
+}
+
+/* ─────────── 카테고리 셀렉트 (인라인) ─────────── */
+const CATEGORY_OPTIONS: { value: string; label: string; color: string }[] = [
+  { value: "consulting", label: "컨설팅", color: "bg-violet-100 text-violet-700 ring-violet-200" },
+  { value: "tech_support", label: "기술지원", color: "bg-blue-100 text-blue-700 ring-blue-200" },
+  { value: "marketing", label: "마케팅", color: "bg-rose-100 text-rose-700 ring-rose-200" },
+  { value: "service", label: "용역", color: "bg-amber-100 text-amber-700 ring-amber-200" },
+  { value: "certification", label: "인증", color: "bg-emerald-100 text-emerald-700 ring-emerald-200" },
+  { value: "etc", label: "기타", color: "bg-slate-100 text-slate-600 ring-slate-200" },
+];
+
+function CategorySelect({
+  value,
+  onChange,
+}: {
+  value: string | null;
+  onChange: (v: string | null) => void;
+}) {
+  const opt = CATEGORY_OPTIONS.find((o) => o.value === value);
+  return (
+    <select
+      value={value ?? ""}
+      onChange={(e) => onChange(e.target.value || null)}
+      className={`text-[10.5px] px-1.5 py-0.5 rounded ring-1 cursor-pointer outline-none focus:ring-2 focus:ring-brand-300 appearance-none w-full ${
+        opt ? opt.color : "bg-slate-50 text-slate-400 ring-slate-200"
+      }`}
+    >
+      <option value="">—</option>
+      {CATEGORY_OPTIONS.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </select>
   );
 }

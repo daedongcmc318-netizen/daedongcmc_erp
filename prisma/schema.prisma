@@ -679,7 +679,8 @@ model MgmtFeeExpense {
 // 혁신/수출 서비스 수행 이력 (시트 import + DB 관리)
 model TrackRecord {
   id              String   @id @default(cuid())
-  type            String   // innovation(혁신) / export(수출)
+  type            String   // 구분: innovation(혁신) / export(수출) / null(미분류)
+  category        String?  // consulting / tech_support / marketing / service / certification / etc
   seqNo           Int?     // 엑셀 '번호' 컬럼 (1, 2, 3, ...)
   serviceName     String   // 서비스명
   serviceFee      BigInt   @default(0) // 서비스이용금액 / 서비스요금
@@ -711,6 +712,7 @@ model TrackRecord {
   electronicTaxInvoice ElectronicTaxInvoice? @relation("TrackRecordTaxInvoice", fields: [electronicTaxInvoiceId], references: [id])
 
   @@index([type])
+  @@index([category])
   @@index([clientCompanyId])
   @@index([year])
   @@index([processedDate])

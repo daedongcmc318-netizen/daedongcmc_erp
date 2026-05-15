@@ -12,6 +12,7 @@ const INT_FIELDS = ["seqNo", "year", "round"];
 const BOOL_FIELDS = ["bizNoChanged"];
 const ALLOWED = new Set([
   "type",
+  "category",
   "seqNo",
   "serviceName",
   "serviceFee",
