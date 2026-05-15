@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { ArrowRight, Users, FolderKanban, Activity, Wallet, Search } from "lucide-react";
+import { ArrowRight, Users, FolderKanban, Activity, Search } from "lucide-react";
 import { getStatusMeta, BIZ_CATEGORY, getBizMeta } from "@/lib/enums";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +19,6 @@ export default async function ManagersPage({
     by: ["managerId"],
     where: { year, managerId: { not: null } },
     _count: true,
-    _sum: { confirmedRevenue: true },
   });
 
   // 매니저 상세
@@ -61,16 +60,14 @@ export default async function ManagersPage({
       const m = mMap.get(g.managerId!);
       if (!m) return null;
       const total = g._count;
-      const revenue = Number(g._sum.confirmedRevenue ?? 0);
       const inProg = inProgressMap.get(g.managerId!) ?? 0;
       const biz = bizMap.get(g.managerId!) ?? new Map();
-      return { manager: m, total, revenue, inProg, biz };
+      return { manager: m, total, inProg, biz };
     })
     .filter((x): x is NonNullable<typeof x> => !!x)
     .sort((a, b) => b.total - a.total);
 
   const totalProjects = cards.reduce((s, c) => s + c.total, 0);
-  const totalRevenue = cards.reduce((s, c) => s + c.revenue, 0);
 
   return (
     <div className="px-8 py-7 max-w-[1500px] mx-auto">
@@ -82,7 +79,7 @@ export default async function ManagersPage({
           </div>
           <h1 className="text-2xl font-semibold tracking-tight">담당자 대시보드</h1>
           <p className="text-sm text-slate-500 mt-1">
-            {year}년 · 담당자 {cards.length}명 · 총 {totalProjects}건 · 매출 ₩{totalRevenue.toLocaleString()}
+            {year}년 · 담당자 {cards.length}명 · 총 {totalProjects}건
           </p>
         </div>
         {/* 연도 버튼 */}
@@ -136,10 +133,9 @@ export default async function ManagersPage({
                 <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-brand-600 group-hover:translate-x-0.5 transition" />
               </div>
 
-              <div className="grid grid-cols-3 gap-2 mb-3">
+              <div className="grid grid-cols-2 gap-2 mb-3">
                 <Stat icon={<FolderKanban className="w-3 h-3" />} label="총 프로젝트" value={`${c.total}건`} color="brand" />
                 <Stat icon={<Activity className="w-3 h-3" />} label="진행중" value={`${c.inProg}건`} color="emerald" />
-                <Stat icon={<Wallet className="w-3 h-3" />} label="매출" value={`${(c.revenue / 1_000_000).toFixed(0)}M`} color="violet" />
               </div>
 
               {/* 사업영역 분포 막대 */}
@@ -190,12 +186,11 @@ function Stat({
   icon: React.ReactNode;
   label: string;
   value: string;
-  color: "brand" | "emerald" | "violet";
+  color: "brand" | "emerald";
 }) {
   const palette = {
     brand: { bg: "bg-brand-50", text: "text-brand-700" },
     emerald: { bg: "bg-emerald-50", text: "text-emerald-700" },
-    violet: { bg: "bg-violet-50", text: "text-violet-700" },
   }[color];
   return (
     <div className={`rounded-lg ${palette.bg} px-2.5 py-1.5`}>
