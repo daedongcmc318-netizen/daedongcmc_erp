@@ -77,6 +77,13 @@ export default async function ManagerDashboardPage({
     weeklyTasks = tasks.map(serializeProject) as any[];
   }
 
+  // 공용 카테고리 (task_category) — 통합 대시보드의 업무현황과 동일
+  const categories = await prisma.dropdownOption.findMany({
+    where: { category: "task_category" },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    select: { id: true, value: true, label: true, color: true },
+  });
+
   return (
     <div className="px-8 py-7 max-w-[1500px] mx-auto">
       <div className="mb-5">
@@ -125,6 +132,7 @@ export default async function ManagerDashboardPage({
         weekStartISO={weekStart.toISOString()}
         initialTasks={weeklyTasks}
         projects={projects.map(serializeProject) as any}
+        initialCategories={categories}
       />
     </div>
   );

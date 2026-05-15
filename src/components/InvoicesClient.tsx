@@ -392,14 +392,14 @@ export default function InvoicesClient({
           <table className="w-full text-xs">
             <thead className="bg-slate-50 sticky top-0 z-10">
               <tr className="text-[11px] text-slate-500 font-medium border-b border-slate-200">
-                <th className="text-left px-3 py-2.5 w-24">작성일자</th>
+                <th className="text-left px-3 py-2.5 w-28 whitespace-nowrap">작성일자</th>
                 <th className="text-left px-3 py-2.5 w-44">거래처</th>
                 <th className="text-left px-3 py-2.5 w-28">사업자번호</th>
                 <th className="text-left px-3 py-2.5">품목명</th>
                 <th className="text-right px-3 py-2.5 w-32">공급가액</th>
                 <th className="text-right px-3 py-2.5 w-28">세액</th>
                 <th className="text-right px-3 py-2.5 w-32">합계</th>
-                <th className="text-left px-3 py-2.5 w-20">분류</th>
+                <th className="text-left px-3 py-2.5 w-24 whitespace-nowrap">분류</th>
                 <th className="text-left px-3 py-2.5 w-20">영수/청구</th>
                 <th className="w-12"></th>
               </tr>
@@ -412,7 +412,7 @@ export default function InvoicesClient({
                 const partnerBiz = isSales ? it.buyerBizNo : it.supplierBizNo;
                 return (
                   <tr key={it.id} className="border-b border-slate-100 hover:bg-slate-50/70 group">
-                    <td className="px-3 py-2 font-mono text-[11px] text-slate-700 tabular-nums">
+                    <td className="px-3 py-2 font-mono text-[11px] text-slate-700 tabular-nums whitespace-nowrap">
                       {fmtDate(it.writeDate)}
                     </td>
                     <td className="px-3 py-2 font-medium text-slate-800 truncate" title={partnerName}>
@@ -433,7 +433,7 @@ export default function InvoicesClient({
                     <td className="px-3 py-2 text-right tabular-nums font-semibold text-slate-900">
                       ₩{fmtAmount(it.totalAmount)}
                     </td>
-                    <td className="px-3 py-2 text-[10.5px] text-slate-500">{it.category ?? "—"}</td>
+                    <td className="px-3 py-2 text-[10.5px] text-slate-500 whitespace-nowrap">{it.category ?? "—"}</td>
                     <td className="px-3 py-2 text-[10.5px] text-slate-500">{it.paymentType ?? "—"}</td>
                     <td className="px-1 text-right">
                       <button

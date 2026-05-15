@@ -62,11 +62,11 @@ export async function POST(req: NextRequest) {
     data: {
       userId,
       date: body.date ? new Date(body.date) : new Date(),
+      dueDate: body.dueDate ? new Date(body.dueDate) : null,
       category: body.category ?? null,
       priority: body.priority ?? null,
       status: body.status ?? "not_started",
       title,
-      progress: typeof body.progress === "number" ? body.progress : 0,
       notes: body.notes ?? null,
       completed: !!body.completed,
       sortOrder: (last?.sortOrder ?? 0) + 1,

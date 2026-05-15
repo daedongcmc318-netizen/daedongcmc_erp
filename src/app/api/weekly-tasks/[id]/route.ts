@@ -6,15 +6,16 @@ import { serializeProject } from "@/lib/serialize";
 
 const ALLOWED = new Set([
   "date",
+  "dueDate",
   "category",
   "priority",
   "status",
   "title",
-  "progress",
   "notes",
   "completed",
   "sortOrder",
 ]);
+const DATE_FIELDS = new Set(["date", "dueDate"]);
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const me = await getCurrentUser();
@@ -30,8 +31,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const data: any = {};
   for (const [k, v] of Object.entries(body)) {
     if (!ALLOWED.has(k)) continue;
-    if (k === "date") {
-      data.date = v ? new Date(v as string) : null;
+    if (DATE_FIELDS.has(k)) {
+      data[k] = v ? new Date(v as string) : null;
     } else {
       data[k] = v;
     }

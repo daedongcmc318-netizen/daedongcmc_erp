@@ -531,12 +531,12 @@ model MajorTask {
 model WeeklyTask {
   id          String   @id @default(cuid())
   userId      String
-  date        DateTime // YYYY-MM-DD 단위 (시각은 00:00 KST)
-  category    String?  // 마케팅 / CRM / 콘텐츠 / 영업 / 데이터분석 등
+  date        DateTime // 예정일 (캘린더에 표시되는 날짜)
+  dueDate     DateTime? // 마감일 (지나면 빨강)
+  category    String?  // task_category dropdown value (혁신/수출/TP/용역/인증/기타/다미엑스/사업준비/기관등록)
   priority    String?  // high / medium / low
   status      String   @default("not_started")
   title       String
-  progress    Int      @default(0) // 0~100 %
   notes       String?
   completed   Boolean  @default(false)
   sortOrder   Float    @default(0)

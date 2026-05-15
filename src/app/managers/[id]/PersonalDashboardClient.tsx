@@ -9,9 +9,10 @@ import {
   CalendarDays,
   Target,
   CheckCircle2,
-  Clock3,
   Circle,
   Pencil,
+  ArrowRightCircle,
+  X,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -19,11 +20,11 @@ type WeeklyTask = {
   id: string;
   userId: string;
   date: string;
-  category: string | null;
+  dueDate: string | null;
+  category: string | null; // value (e.g. "innovation")
   priority: string | null;
   status: string;
   title: string;
-  progress: number;
   notes: string | null;
   completed: boolean;
   sortOrder: number;
@@ -40,6 +41,8 @@ type Project = {
   finalReportDate: string | null;
   finalReportYn: boolean;
 };
+
+type Category = { id: string; value: string; label: string; color: string | null };
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -77,6 +80,7 @@ export default function PersonalDashboardClient({
   weekStartISO,
   initialTasks,
   projects,
+  initialCategories,
 }: {
   userId: string;
   isOwner: boolean;
@@ -85,10 +89,19 @@ export default function PersonalDashboardClient({
   weekStartISO: string;
   initialTasks: WeeklyTask[];
   projects: Project[];
+  initialCategories: Category[];
 }) {
   const router = useRouter();
   const [tasks, setTasks] = useState<WeeklyTask[]>(initialTasks);
+  const [categories, setCategories] = useState<Category[]>(initialCategories);
   const [, startTransition] = useTransition();
+  const [showCatManager, setShowCatManager] = useState(false);
+
+  const catByValue = useMemo(() => {
+    const m = new Map<string, Category>();
+    for (const c of categories) m.set(c.value, c);
+    return m;
+  }, [categories]);
 
   const weekStart = new Date(weekStartISO);
   const days = Array.from({ length: 7 }, (_, i) => {
@@ -130,9 +143,7 @@ export default function PersonalDashboardClient({
   }
 
   function patchTask(id: string, patch: Partial<WeeklyTask>) {
-    setTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, ...patch } : t))
-    );
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
     startTransition(async () => {
       const res = await fetch(`/api/weekly-tasks/${id}`, {
         method: "PATCH",
@@ -154,17 +165,72 @@ export default function PersonalDashboardClient({
     });
   }
 
-  // 정렬: 날짜 → sortOrder
+  /** 특정 날짜의 미완료 업무를 다음 영업일로 이관 */
+  async function rolloverDay(dateISO: string) {
+    if (!canSeeWeeklyPlanner) return;
+    const dayTasks = tasks.filter(
+      (t) => sameDay(t.date, dateISO) && !t.completed && t.status !== "done"
+    );
+    if (dayTasks.length === 0) {
+      alert("이 날짜에 이관할 미완료 업무가 없습니다.");
+      return;
+    }
+    if (!confirm(`${dayTasks.length}건을 다음 영업일로 이관할까요?`)) return;
+    const res = await fetch(`/api/weekly-tasks/rollover`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, fromDate: dateISO }),
+    });
+    if (!res.ok) {
+      alert("이관 실패");
+      return;
+    }
+    router.refresh();
+  }
+
+  /** 오늘(또는 가장 가까운 과거 평일)의 미완료 업무 이관 — 헤더 버튼 */
+  async function rolloverToday() {
+    await rolloverDay(fmtDate(new Date()));
+  }
+
+  // 카테고리 추가/삭제
+  async function addCategory(label: string) {
+    const trimmed = label.trim();
+    if (!trimmed) return;
+    if (categories.some((c) => c.label === trimmed)) {
+      alert("이미 같은 카테고리가 있습니다.");
+      return;
+    }
+    const res = await fetch(`/api/dropdown-options`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ category: "task_category", label: trimmed }),
+    });
+    if (!res.ok) {
+      alert("카테고리 추가 실패");
+      return;
+    }
+    const created: Category = await res.json();
+    setCategories((prev) => [...prev, created]);
+  }
+
+  async function delCategory(id: string) {
+    if (!confirm("이 카테고리를 삭제할까요? (기존 업무의 분류는 빈 값이 됩니다)")) return;
+    const res = await fetch(`/api/dropdown-options/${id}`, { method: "DELETE" });
+    if (!res.ok) return;
+    setCategories((prev) => prev.filter((c) => c.id !== id));
+  }
+
   const sortedTasks = useMemo(
-    () => [...tasks].sort((a, b) => {
-      const d = new Date(a.date).getTime() - new Date(b.date).getTime();
-      if (d !== 0) return d;
-      return a.sortOrder - b.sortOrder;
-    }),
+    () =>
+      [...tasks].sort((a, b) => {
+        const d = new Date(a.date).getTime() - new Date(b.date).getTime();
+        if (d !== 0) return d;
+        return a.sortOrder - b.sortOrder;
+      }),
     [tasks]
   );
 
-  // 오늘 표시
   const today = new Date();
 
   return (
@@ -204,14 +270,13 @@ export default function PersonalDashboardClient({
         )}
       </section>
 
-      {/* 위클리 플래너 (본인/admin 만) */}
       {!canSeeWeeklyPlanner ? (
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 text-center text-xs text-slate-500">
           🔒 주간 플래너는 본인만 열람할 수 있습니다.
         </div>
       ) : (
         <>
-          {/* 상단 컨트롤 + 통계 */}
+          {/* 상단 컨트롤 + 통계 + 캘린더 */}
           <section className="bg-white border border-slate-200 rounded-2xl shadow-card p-5">
             <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
               <div className="flex items-center gap-2">
@@ -224,6 +289,13 @@ export default function PersonalDashboardClient({
                 )}
               </div>
               <div className="flex items-center gap-1.5">
+                <button
+                  onClick={rolloverToday}
+                  className="h-8 px-2.5 text-[11px] bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 rounded inline-flex items-center gap-1"
+                  title="오늘의 미완료 업무를 다음 영업일로 이관"
+                >
+                  <ArrowRightCircle className="w-3.5 h-3.5" /> 오늘 미완료 이관
+                </button>
                 <button onClick={() => navWeek(-1)} className="h-8 w-8 inline-flex items-center justify-center bg-white hover:bg-slate-50 border border-slate-200 rounded">
                   <ChevronLeft className="w-3.5 h-3.5" />
                 </button>
@@ -252,7 +324,9 @@ export default function PersonalDashboardClient({
             <div className="grid grid-cols-7 gap-1 border-t border-slate-200 pt-3">
               {days.map((d, i) => {
                 const dayTasks = sortedTasks.filter((t) => sameDay(t.date, d));
+                const undone = dayTasks.filter((t) => !t.completed && t.status !== "done");
                 const isToday = sameDay(d, today);
+                const isPast = d < new Date(today.getFullYear(), today.getMonth(), today.getDate());
                 const isWeekend = i === 0 || i === 6;
                 return (
                   <div
@@ -269,17 +343,29 @@ export default function PersonalDashboardClient({
                           {d.getMonth() + 1}/{d.getDate()}
                         </span>
                       </div>
-                      <button
-                        onClick={() => addTask(fmtDate(d))}
-                        className="w-4 h-4 rounded bg-white border border-slate-200 text-slate-400 hover:text-brand-600 hover:border-brand-300 inline-flex items-center justify-center"
-                        title="이 날짜에 새 업무"
-                      >
-                        <Plus className="w-2.5 h-2.5" />
-                      </button>
+                      <div className="flex items-center gap-0.5">
+                        {undone.length > 0 && (isPast || isToday) && (
+                          <button
+                            onClick={() => rolloverDay(fmtDate(d))}
+                            className="w-4 h-4 rounded bg-white border border-amber-200 text-amber-600 hover:bg-amber-100 inline-flex items-center justify-center"
+                            title={`이 날짜 미완료 ${undone.length}건 → 다음 영업일`}
+                          >
+                            <ArrowRightCircle className="w-2.5 h-2.5" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => addTask(fmtDate(d))}
+                          className="w-4 h-4 rounded bg-white border border-slate-200 text-slate-400 hover:text-brand-600 hover:border-brand-300 inline-flex items-center justify-center"
+                          title="이 날짜에 새 업무"
+                        >
+                          <Plus className="w-2.5 h-2.5" />
+                        </button>
+                      </div>
                     </div>
                     <ul className="space-y-0.5">
                       {dayTasks.map((t) => {
                         const isDone = t.completed || t.status === "done";
+                        const cat = t.category ? catByValue.get(t.category) : null;
                         const sm = STATUS_META[t.status] ?? STATUS_META.not_started;
                         return (
                           <li
@@ -290,7 +376,13 @@ export default function PersonalDashboardClient({
                             )}
                             title={t.title}
                           >
-                            <span className={clsx("w-1.5 h-1.5 rounded-full shrink-0", sm.dot)} />
+                            {cat ? (
+                              <span className={clsx("text-[8.5px] px-1 py-px rounded ring-1 truncate shrink-0", cat.color)}>
+                                {cat.label}
+                              </span>
+                            ) : (
+                              <span className={clsx("w-1.5 h-1.5 rounded-full shrink-0", sm.dot)} />
+                            )}
                             <span className="truncate">{t.title || "(빈 업무)"}</span>
                           </li>
                         );
@@ -305,30 +397,47 @@ export default function PersonalDashboardClient({
             </div>
           </section>
 
-          {/* 업무 리스트 (편집 가능) */}
+          {/* 카테고리 관리 + 업무 리스트 */}
           <section className="bg-white border border-slate-200 rounded-2xl shadow-card overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+            <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between gap-2 flex-wrap">
               <h2 className="text-sm font-semibold flex items-center gap-1.5">
                 <Pencil className="w-3.5 h-3.5 text-slate-500" /> 이번 주 업무 리스트
               </h2>
-              <button
-                onClick={() => addTask(fmtDate(today))}
-                className="h-7 px-2.5 text-[11px] bg-brand-50 text-brand-700 hover:bg-brand-100 border border-brand-200 rounded inline-flex items-center gap-1"
-              >
-                <Plus className="w-3 h-3" /> 새 업무 (오늘)
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setShowCatManager((v) => !v)}
+                  className="h-7 px-2.5 text-[11px] bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 rounded inline-flex items-center gap-1"
+                >
+                  카테고리 관리 ({categories.length})
+                </button>
+                <button
+                  onClick={() => addTask(fmtDate(today))}
+                  className="h-7 px-2.5 text-[11px] bg-brand-50 text-brand-700 hover:bg-brand-100 border border-brand-200 rounded inline-flex items-center gap-1"
+                >
+                  <Plus className="w-3 h-3" /> 새 업무 (오늘)
+                </button>
+              </div>
             </div>
+
+            {showCatManager && (
+              <CategoryManager
+                categories={categories}
+                onAdd={addCategory}
+                onDelete={delCategory}
+              />
+            )}
+
             <div className="overflow-auto">
               <table className="w-full text-[11.5px]">
                 <thead className="bg-slate-50 text-[10.5px] text-slate-500">
                   <tr className="border-b border-slate-200">
-                    <th className="text-center w-16 px-2 py-2">완료</th>
+                    <th className="text-center w-14 px-2 py-2">완료</th>
                     <th className="text-center w-28 px-2 py-2">날짜</th>
-                    <th className="text-center w-28 px-2 py-2">카테고리</th>
+                    <th className="text-center w-24 px-2 py-2">카테고리</th>
                     <th className="text-center w-20 px-2 py-2">우선순위</th>
                     <th className="text-center w-24 px-2 py-2">상태</th>
                     <th className="text-left px-3 py-2">업무</th>
-                    <th className="text-center w-20 px-2 py-2">진행률</th>
+                    <th className="text-center w-28 px-2 py-2">마감일자</th>
                     <th className="text-left w-40 px-3 py-2">비고</th>
                     <th className="text-center w-10 px-1 py-2"></th>
                   </tr>
@@ -342,7 +451,13 @@ export default function PersonalDashboardClient({
                     </tr>
                   ) : (
                     sortedTasks.map((t) => (
-                      <TaskRow key={t.id} task={t} onPatch={(p) => patchTask(t.id, p)} onDelete={() => delTask(t.id)} />
+                      <TaskRow
+                        key={t.id}
+                        task={t}
+                        categories={categories}
+                        onPatch={(p) => patchTask(t.id, p)}
+                        onDelete={() => delTask(t.id)}
+                      />
                     ))
                   )}
                 </tbody>
@@ -381,18 +496,93 @@ function StatCard({
   );
 }
 
+function CategoryManager({
+  categories,
+  onAdd,
+  onDelete,
+}: {
+  categories: Category[];
+  onAdd: (label: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [newLabel, setNewLabel] = useState("");
+  return (
+    <div className="px-4 py-3 bg-slate-50/50 border-b border-slate-200">
+      <div className="flex items-center gap-2 mb-2">
+        <input
+          value={newLabel}
+          onChange={(e) => setNewLabel(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              onAdd(newLabel);
+              setNewLabel("");
+            }
+          }}
+          placeholder="새 카테고리 이름..."
+          className="h-7 px-2 text-[11px] bg-white border border-slate-200 rounded outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-100 w-48"
+        />
+        <button
+          onClick={() => {
+            onAdd(newLabel);
+            setNewLabel("");
+          }}
+          className="h-7 px-2.5 text-[11px] bg-brand-600 text-white hover:bg-brand-700 rounded"
+        >
+          추가
+        </button>
+        <span className="ml-auto text-[10px] text-slate-400">
+          색상은 자동 할당됩니다. 삭제 시 해당 카테고리가 설정된 업무는 빈 값으로 표시됩니다.
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {categories.map((c) => (
+          <span
+            key={c.id}
+            className={clsx(
+              "inline-flex items-center gap-1 text-[10.5px] px-1.5 py-0.5 rounded ring-1",
+              c.color ?? "bg-slate-100 text-slate-600 ring-slate-200"
+            )}
+          >
+            {c.label}
+            <button
+              onClick={() => onDelete(c.id)}
+              className="hover:bg-white/40 rounded p-px"
+              title="삭제"
+            >
+              <X className="w-2.5 h-2.5" />
+            </button>
+          </span>
+        ))}
+        {categories.length === 0 && (
+          <span className="text-[10.5px] text-slate-400">등록된 카테고리 없음</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function TaskRow({
   task,
+  categories,
   onPatch,
   onDelete,
 }: {
   task: WeeklyTask;
+  categories: Category[];
   onPatch: (patch: Partial<WeeklyTask>) => void;
   onDelete: () => void;
 }) {
   const isDone = task.completed || task.status === "done";
   const sm = STATUS_META[task.status] ?? STATUS_META.not_started;
   const pm = task.priority ? PRIORITY_META[task.priority] : null;
+  const cat = task.category ? categories.find((c) => c.value === task.category) : null;
+
+  // 마감일자가 오늘보다 과거면 빨강
+  const today = new Date();
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const isOverdue = task.dueDate && !isDone && fmtDate(task.dueDate) < todayKey;
+  const isDueToday = task.dueDate && !isDone && fmtDate(task.dueDate) === todayKey;
+
   return (
     <tr className={clsx("border-b border-slate-100 hover:bg-slate-50/40", isDone && "bg-slate-50/40")}>
       <td className="text-center px-2 py-1.5">
@@ -416,12 +606,21 @@ function TaskRow({
         />
       </td>
       <td className="text-center px-2 py-1.5">
-        <InlineText
+        <select
           value={task.category ?? ""}
-          onSave={(v) => onPatch({ category: v || null })}
-          placeholder="—"
-          className="text-[11px] text-slate-600 text-center"
-        />
+          onChange={(e) => onPatch({ category: e.target.value || null })}
+          className={clsx(
+            "text-[10.5px] px-1.5 py-0.5 rounded border border-transparent cursor-pointer outline-none focus:ring-1 focus:ring-brand-200 appearance-none w-full ring-1",
+            cat ? cat.color ?? "bg-slate-50 text-slate-500 ring-slate-200" : "bg-slate-50 text-slate-400 ring-slate-200"
+          )}
+        >
+          <option value="">—</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.value}>
+              {c.label}
+            </option>
+          ))}
+        </select>
       </td>
       <td className="text-center px-2 py-1.5">
         <SelectBadge
@@ -457,24 +656,23 @@ function TaskRow({
           className={clsx("text-[11.5px]", isDone ? "text-slate-400 line-through" : "text-slate-800")}
         />
       </td>
-      <td className="text-center px-2 py-1.5">
-        <div className="flex items-center gap-1">
-          <input
-            type="number"
-            min={0}
-            max={100}
-            step={5}
-            value={task.progress}
-            onChange={(e) => onPatch({ progress: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
-            className="w-10 text-right text-[11px] tabular-nums bg-transparent focus:bg-white focus:ring-1 focus:ring-brand-200 outline-none rounded"
-          />
-          <span className="text-[10px] text-slate-400">%</span>
-        </div>
-        {task.progress > 0 && (
-          <div className="h-1 mt-0.5 bg-slate-100 rounded-full overflow-hidden">
-            <div className={clsx("h-full", task.progress >= 100 ? "bg-emerald-500" : "bg-brand-500")} style={{ width: `${task.progress}%` }} />
-          </div>
+      <td
+        className={clsx(
+          "text-center px-2 py-1.5",
+          isOverdue && "bg-rose-50",
+          isDueToday && "bg-amber-50"
         )}
+      >
+        <input
+          type="date"
+          value={task.dueDate ? fmtDate(task.dueDate) : ""}
+          onChange={(e) => onPatch({ dueDate: e.target.value || null })}
+          className={clsx(
+            "w-full text-center text-[11px] bg-transparent focus:bg-white focus:ring-1 focus:ring-brand-200 outline-none rounded px-0.5 tabular-nums font-mono",
+            isOverdue && "text-rose-700 font-semibold",
+            isDueToday && "text-amber-700 font-semibold"
+          )}
+        />
       </td>
       <td className="px-3 py-1.5">
         <InlineText
