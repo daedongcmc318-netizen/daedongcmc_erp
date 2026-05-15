@@ -19,6 +19,7 @@ type Row = {
   monthlyRemaining: number;
   pendingDeducting: number;
   byType: Record<string, number>;
+  hasQuota?: boolean;
 };
 
 const TYPE_LABEL: Record<string, string> = {
@@ -216,7 +217,7 @@ export default function LeavesOverviewClient({
                     <td className="px-2 py-2 border-r border-slate-100 text-right tabular-nums font-semibold text-blue-700">
                       {r.annualUsed}
                     </td>
-                    <td className="px-2 py-2 border-r border-slate-100 text-right tabular-nums font-semibold text-slate-800">
+                    <td className={clsx("px-2 py-2 border-r border-slate-100 text-right tabular-nums font-semibold", r.annualRemaining < 0 ? "text-rose-600" : "text-slate-800")}>
                       {r.annualRemaining}
                       {r.annualTotal > 0 && (
                         <div className="h-1 bg-blue-100 rounded-full overflow-hidden mt-0.5">
@@ -231,7 +232,7 @@ export default function LeavesOverviewClient({
                     <td className="px-2 py-2 border-r border-slate-100 text-right tabular-nums font-semibold text-violet-700">
                       {r.monthlyUsed}
                     </td>
-                    <td className="px-2 py-2 border-r border-slate-100 text-right tabular-nums font-semibold text-slate-800">
+                    <td className={clsx("px-2 py-2 border-r border-slate-100 text-right tabular-nums font-semibold", r.monthlyRemaining < 0 ? "text-rose-600" : "text-slate-800")}>
                       {r.monthlyRemaining}
                     </td>
                     {/* 결재중 */}

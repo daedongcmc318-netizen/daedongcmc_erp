@@ -22,6 +22,7 @@ import {
   Wallet,
   Award,
   Briefcase,
+  Pin,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -46,6 +47,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
           { href: "/managers", label: "담당자별 관리", icon: UserCheck },
           { href: "/reviews", label: "산출물 검토", icon: ClipboardCheck },
           { href: "/consultant-md", label: "혁신 컨설턴트 MD", icon: CalendarDays },
+          { href: "/major-tasks", label: "주요 업무 관리", icon: Pin },
         ],
       },
       {

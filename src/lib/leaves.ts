@@ -115,19 +115,26 @@ export type LeaveBalance = {
   totalUsedThisYear: number;
 };
 
-export async function getUserLeaveBalance(userId: string): Promise<LeaveBalance | null> {
+export async function getUserLeaveBalance(userId: string, year?: number): Promise<LeaveBalance | null> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { id: true, isInternal: true, joinDate: true, annualLeaveUsed: true },
   });
   if (!user) return null;
 
-  const annualTotal = calculateAnnualLeaveTotal(user.joinDate);
-  const monthlyTotal = calculateMonthlyLeaveTotal(user.joinDate);
+  const refYear = year ?? new Date().getFullYear();
 
-  // 이번 해 승인된 휴가 사용량 집계
-  const yearStart = new Date(new Date().getFullYear(), 0, 1);
-  const yearEnd = new Date(new Date().getFullYear() + 1, 0, 1);
+  // 수동 한도(quota)가 있으면 우선 사용
+  const quota = await prisma.userLeaveQuota.findUnique({
+    where: { userId_year: { userId, year: refYear } },
+  });
+
+  const annualTotal = quota ? quota.annualTotal : calculateAnnualLeaveTotal(user.joinDate);
+  const monthlyTotal = quota ? quota.monthlyTotal : calculateMonthlyLeaveTotal(user.joinDate);
+
+  // 해당 연도 승인된 휴가 사용량 집계
+  const yearStart = new Date(refYear, 0, 1);
+  const yearEnd = new Date(refYear + 1, 0, 1);
   const used = await prisma.leaveRequest.findMany({
     where: {
       userId,

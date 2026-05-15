@@ -58,14 +58,21 @@ export default async function LeavesOverviewPage({
     select: { id: true, userId: true, type: true, days: true },
   });
 
+  // 해당 연도 수동 한도 (quota)
+  const quotas = await prisma.userLeaveQuota.findMany({
+    where: { userId: { in: users.map((u) => u.id) }, year },
+  });
+  const quotaByUser = new Map(quotas.map((q) => [q.userId, q]));
+
   const now = new Date();
   const rows = users.map((u) => {
     const myLeaves = leaves.filter((l) => l.userId === u.id);
     const myPending = pending.filter((p) => p.userId === u.id);
+    const q = quotaByUser.get(u.id);
 
-    // 차감 대상: annual / monthly / half_am / half_pm
-    const annualTotal = u.joinDate ? calculateAnnualLeaveTotal(u.joinDate, now) : 0;
-    const monthlyTotal = u.joinDate ? calculateMonthlyLeaveTotal(u.joinDate, now) : 0;
+    // quota 우선, 없으면 자동 계산
+    const annualTotal = q ? q.annualTotal : u.joinDate ? calculateAnnualLeaveTotal(u.joinDate, now) : 0;
+    const monthlyTotal = q ? q.monthlyTotal : u.joinDate ? calculateMonthlyLeaveTotal(u.joinDate, now) : 0;
 
     let annualUsed = 0;
     let monthlyUsed = 0;
@@ -91,12 +98,13 @@ export default async function LeavesOverviewPage({
       tenure: formatTenure(u.joinDate, now),
       annualTotal,
       annualUsed,
-      annualRemaining: Math.max(0, annualTotal - annualUsed),
+      annualRemaining: annualTotal - annualUsed, // 음수 가능 (초과 사용)
       monthlyTotal,
       monthlyUsed,
-      monthlyRemaining: Math.max(0, monthlyTotal - monthlyUsed),
+      monthlyRemaining: monthlyTotal - monthlyUsed,
       pendingDeducting,
       byType,
+      hasQuota: !!q, // 수동 한도 적용 여부
     };
   });
 

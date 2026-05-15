@@ -63,6 +63,8 @@ model User {
   leaveRequests      LeaveRequest[] @relation("LeaveRequester")
   approvedLeaves     LeaveRequest[] @relation("LeaveApprover")
   leaveApprovals     LeaveApproval[] @relation("LeaveApprovalApprover")
+  leaveQuotas        UserLeaveQuota[]
+  majorTasks         MajorTask[]      @relation("MajorTaskAssignee")
   educations         UserEducation[]
   certificates       Certificate[]    @relation("UserCertificates")
   managedConsultantPlans   ConsultantPlan[]       @relation("ConsultantPlanManager")
@@ -495,6 +497,47 @@ model AppSetting {
   key       String   @unique
   value     String   // JSON 문자열
   updatedAt DateTime @updatedAt
+}
+
+// 주요 업무 (프로젝트와 별도, 노션 같은 진행현황 관리)
+//   예: 수행기관 등록, 발표 날짜, 컨설팅 공급기관 모집 등
+model MajorTask {
+  id            String   @id @default(cuid())
+  category      String?  // 용역 / 다미엑스 / 사업준비 등 (자유)
+  title         String
+  targetDate    DateTime?
+  status        String   @default("not_started") // not_started / in_progress / review / done
+  priority      String?  // high / medium / low
+  assigneeId    String?  // User FK
+  assigneeCode  String?  // 표시용 코드 (DHK 등, 직원 외에 외부도 가능)
+  notes         String?
+  completed     Boolean  @default(false)
+  sortOrder     Int      @default(0)
+  createdById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  assignee      User?    @relation("MajorTaskAssignee", fields: [assigneeId], references: [id])
+
+  @@index([completed])
+  @@index([status])
+  @@index([targetDate])
+}
+
+// 직원별 연도별 휴가 한도 (수동 설정 — getUserLeaveBalance에서 자동계산 대신 사용)
+model UserLeaveQuota {
+  id            String  @id @default(cuid())
+  userId        String
+  year          Int
+  annualTotal   Float   @default(0) // 연차 한도
+  monthlyTotal  Float   @default(0) // 월차 한도
+  notes         String?
+  updatedAt     DateTime @updatedAt
+
+  user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, year])
+  @@index([userId])
 }
 
 model LeaveRequest {
