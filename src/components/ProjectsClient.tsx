@@ -509,6 +509,24 @@ export default function ProjectsClient({
     }
   }
 
+  function deleteDeliverable(projectId: string, deliverableId: string) {
+    // 낙관적 제거
+    setProjects((prev) =>
+      prev.map((p) =>
+        p.id === projectId
+          ? { ...p, deliverables: p.deliverables.filter((d) => d.id !== deliverableId) }
+          : p
+      )
+    );
+    (async () => {
+      const res = await fetch(`/api/project-deliverables/${deliverableId}`, { method: "DELETE" });
+      if (!res.ok) {
+        // 롤백을 위해 새로고침
+        window.location.reload();
+      }
+    })();
+  }
+
   async function createInvoice(projectId: string, patch: Record<string, any>) {
     const res = await fetch(`/api/tax-invoices`, {
       method: "POST",
@@ -847,6 +865,7 @@ export default function ProjectsClient({
                   onPatchInvoice={(invId, patch) => startTransition(() => patchInvoice(invId, p.id, patch))}
                   onCreateInvoice={(patch) => startTransition(() => createInvoice(p.id, patch))}
                   onUpsertDeliverable={(seq, patch) => startTransition(() => upsertDeliverable(p.id, seq, patch))}
+                  onDeleteDeliverable={(deliverableId) => startTransition(() => deleteDeliverable(p.id, deliverableId))}
                   onDelete={() => deleteProject(p.id)}
                   onDragStart={() => setDragId(p.id)}
                   onDragOver={(e) => {
@@ -1027,6 +1046,7 @@ function ProjectRow({
   onPatchInvoice,
   onCreateInvoice,
   onUpsertDeliverable,
+  onDeleteDeliverable,
   onDelete,
   onDragStart,
   onDragOver,
@@ -1049,6 +1069,7 @@ function ProjectRow({
   onPatchInvoice: (invoiceId: string, patch: any) => void;
   onCreateInvoice: (patch: any) => void;
   onUpsertDeliverable: (seq: number, patch: any) => void;
+  onDeleteDeliverable: (deliverableId: string) => void;
   onDelete: () => void;
   onDragStart: () => void;
   onDragOver: (e: React.DragEvent) => void;
@@ -1099,7 +1120,7 @@ function ProjectRow({
             )}
             style={isFrozen ? { left: `${left}px`, zIndex: 5 } : undefined}
           >
-            {renderCell(c, project, inv, contact, users, onPatch, invUpdate, onUpsertDeliverable, onDelete, onDragStart, onInsertAfter, isSelected, onToggleSelect, onOpenNotes, customOptionsFor, onOptionAdded, onOptionReorder, onOptionRemove)}
+            {renderCell(c, project, inv, contact, users, onPatch, invUpdate, onUpsertDeliverable, onDeleteDeliverable, onDelete, onDragStart, onInsertAfter, isSelected, onToggleSelect, onOpenNotes, customOptionsFor, onOptionAdded, onOptionReorder, onOptionRemove)}
           </td>
         );
       })}
@@ -1116,6 +1137,7 @@ function renderCell(
   onPatch: (patch: any) => void,
   invUpdate: (patch: Record<string, any>) => void,
   onUpsertDeliverable: (seq: number, patch: any) => void,
+  onDeleteDeliverable: (deliverableId: string) => void,
   onDelete: () => void,
   onDragStart: () => void,
   onInsertAfter: () => void,
@@ -1538,8 +1560,23 @@ function renderCell(
         }
       };
 
+      const handleDelete = () => {
+        if (!d) return;
+        if (!confirm(`산출물 "${d.title || "(빈 칸)"}" 을(를) 삭제할까요?`)) return;
+        onDeleteDeliverable(d.id);
+      };
       return (
-        <div className={clsx("rounded px-1 py-1 -m-1", bg)}>
+        <div className={clsx("group/del rounded px-1 py-1 -m-1 relative", bg)}>
+          {d && (
+            <button
+              type="button"
+              onClick={handleDelete}
+              title="산출물 삭제"
+              className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-white border border-rose-200 text-rose-500 hover:bg-rose-500 hover:text-white shadow-sm opacity-0 group-hover/del:opacity-100 transition flex items-center justify-center text-[10px] leading-none z-10"
+            >
+              ×
+            </button>
+          )}
           <InlineText
             value={d?.title ?? ""}
             onSave={(v) => onUpsertDeliverable(seq, { title: v })}
