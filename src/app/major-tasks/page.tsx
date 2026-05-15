@@ -13,7 +13,11 @@ export default async function MajorTasksPage() {
   const [tasks, users] = await Promise.all([
     prisma.majorTask.findMany({
       include: { assignee: { select: { id: true, name: true, pmCode: true } } },
-      orderBy: [{ completed: "asc" }, { sortOrder: "asc" }, { targetDate: "asc" }],
+      orderBy: [
+        { completed: "asc" },
+        { targetDate: { sort: "asc", nulls: "last" } },
+        { sortOrder: "asc" },
+      ],
     }),
     prisma.user.findMany({
       where: { status: "active" },

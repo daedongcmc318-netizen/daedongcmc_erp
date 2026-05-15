@@ -17,7 +17,11 @@ export async function GET(req: NextRequest) {
   const items = await prisma.majorTask.findMany({
     where,
     include: { assignee: { select: { id: true, name: true, pmCode: true } } },
-    orderBy: [{ completed: "asc" }, { sortOrder: "asc" }, { targetDate: "asc" }],
+    orderBy: [
+      { completed: "asc" },
+      { targetDate: { sort: "asc", nulls: "last" } },
+      { sortOrder: "asc" },
+    ],
   });
   return NextResponse.json(items.map(serializeProject));
 }

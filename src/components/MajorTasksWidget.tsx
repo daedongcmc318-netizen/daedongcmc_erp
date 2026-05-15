@@ -11,7 +11,10 @@ export default async function MajorTasksWidget() {
   const tasks = await prisma.majorTask.findMany({
     where: { completed: false },
     include: { assignee: { select: { id: true, name: true, pmCode: true } } },
-    orderBy: [{ sortOrder: "asc" }, { targetDate: "asc" }],
+    orderBy: [
+      { targetDate: { sort: "asc", nulls: "last" } },
+      { sortOrder: "asc" },
+    ],
   });
 
   const users = await prisma.user.findMany({
