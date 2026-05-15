@@ -663,12 +663,10 @@ function TaskRow({
           isDueToday && "bg-amber-50"
         )}
       >
-        <input
-          type="date"
+        <ShortDateInput
           value={task.dueDate ? fmtDate(task.dueDate) : ""}
-          onChange={(e) => onPatch({ dueDate: e.target.value || null })}
+          onSave={(iso) => onPatch({ dueDate: iso })}
           className={clsx(
-            "w-full text-center text-[11px] bg-transparent focus:bg-white focus:ring-1 focus:ring-brand-200 outline-none rounded px-0.5 tabular-nums font-mono",
             isOverdue && "text-rose-700 font-semibold",
             isDueToday && "text-amber-700 font-semibold"
           )}
@@ -766,5 +764,95 @@ function SelectBadge({
         </option>
       ))}
     </select>
+  );
+}
+
+/**
+ * 짧은 날짜 입력 컴포넌트.
+ *   - 표시: "2026.05.15" (저장된 값) 또는 빈 칸 (없을 때)
+ *   - 입력 허용 포맷:
+ *       260515 / 26-05-15 / 26.05.15 → 2026-05-15
+ *       20260515 / 2026-05-15 / 2026.05.15 → 2026-05-15
+ *   - blur 또는 Enter 시 파싱 → ISO(YYYY-MM-DD) 로 저장
+ *   - 빈 문자열 저장 시 null
+ *   - 잘못된 입력은 원래 값으로 되돌림
+ */
+function ShortDateInput({
+  value,
+  onSave,
+  className,
+}: {
+  value: string; // "YYYY-MM-DD" 또는 ""
+  onSave: (iso: string | null) => void;
+  className?: string;
+}) {
+  const [draft, setDraft] = useState("");
+  const [editing, setEditing] = useState(false);
+
+  function display(v: string): string {
+    if (!v) return "";
+    // v 는 YYYY-MM-DD
+    return v.replaceAll("-", ".");
+  }
+
+  function parse(raw: string): string | null | undefined {
+    const t = raw.trim();
+    if (!t) return null; // 빈 입력 → null 저장
+    const digits = t.replace(/\D/g, "");
+    let y: number, m: number, d: number;
+    if (digits.length === 6) {
+      // YYMMDD
+      y = 2000 + Number(digits.slice(0, 2));
+      m = Number(digits.slice(2, 4));
+      d = Number(digits.slice(4, 6));
+    } else if (digits.length === 8) {
+      // YYYYMMDD
+      y = Number(digits.slice(0, 4));
+      m = Number(digits.slice(4, 6));
+      d = Number(digits.slice(6, 8));
+    } else {
+      return undefined; // 파싱 실패
+    }
+    if (m < 1 || m > 12 || d < 1 || d > 31 || y < 2000 || y > 2099) return undefined;
+    return `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  }
+
+  function commit() {
+    setEditing(false);
+    if (draft.trim() === display(value)) return; // 변경 없음
+    const result = parse(draft);
+    if (result === undefined) {
+      // 잘못된 입력 → 원래 값으로 복원
+      setDraft(display(value));
+      return;
+    }
+    onSave(result); // null 또는 ISO
+  }
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      value={editing ? draft : display(value)}
+      onFocus={() => {
+        setDraft(display(value));
+        setEditing(true);
+      }}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        else if (e.key === "Escape") {
+          setDraft(display(value));
+          setEditing(false);
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+      placeholder="260515"
+      className={clsx(
+        "w-full text-center text-[11px] bg-transparent focus:bg-white focus:ring-1 focus:ring-brand-200 outline-none rounded px-0.5 tabular-nums font-mono",
+        className
+      )}
+    />
   );
 }
