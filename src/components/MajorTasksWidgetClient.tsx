@@ -1,5 +1,6 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -407,6 +408,18 @@ function AssigneeSelect({
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
+  const [mounted, setMounted] = useState(false);
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
+  useEffect(() => setMounted(true), []);
+
+  // 버튼 위치 추적 → 드롭다운을 화면 최상위(portal) 로 띄움
+  useEffect(() => {
+    if (!open || !btnRef.current) return;
+    const r = btnRef.current.getBoundingClientRect();
+    setCoords({ top: r.bottom + 4, left: Math.min(r.left, window.innerWidth - 240) });
+  }, [open]);
+
   const filtered = q
     ? users.filter((u) => u.name.includes(q) || (u.pmCode ?? "").toLowerCase().includes(q.toLowerCase()))
     : users.slice(0, 30);
@@ -414,6 +427,7 @@ function AssigneeSelect({
   return (
     <div className="relative">
       <button
+        ref={btnRef}
         onClick={() => setOpen(!open)}
         className={clsx(
           "px-1.5 py-0.5 rounded text-[10.5px] font-medium font-mono",
@@ -422,55 +436,59 @@ function AssigneeSelect({
       >
         {value ?? "—"}
       </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div className="absolute z-40 mt-1 w-56 bg-white border border-slate-200 rounded shadow-lg p-2">
-            <input
-              autoFocus
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="이름/코드 검색..."
-              className="w-full h-7 px-2 text-[11px] border border-slate-200 rounded outline-none focus:border-amber-300 mb-1"
-            />
-            <button
-              onClick={() => {
-                onChange(null, null);
-                setOpen(false);
-              }}
-              className="w-full text-left px-2 py-1 text-[10.5px] text-slate-400 hover:bg-slate-50 rounded"
+      {open && mounted && coords &&
+        createPortal(
+          <>
+            <div className="fixed inset-0 z-[1000]" onClick={() => setOpen(false)} />
+            <div
+              style={{ position: "fixed", top: coords.top, left: coords.left, width: 224, zIndex: 1001 }}
+              className="bg-white border border-slate-200 rounded shadow-xl p-2"
             >
-              비워두기
-            </button>
-            {/* 빠른 코드 입력 */}
-            <button
-              onClick={() => {
-                onChange(q.trim() || null, null);
-                setOpen(false);
-              }}
-              disabled={!q.trim()}
-              className="w-full text-left px-2 py-1 text-[10.5px] text-amber-700 hover:bg-amber-50 rounded disabled:opacity-30"
-            >
-              직접 입력: <strong>{q.trim() || "—"}</strong>
-            </button>
-            <div className="max-h-48 overflow-auto mt-1 border-t border-slate-100 pt-1">
-              {filtered.map((u) => (
-                <button
-                  key={u.id}
-                  onClick={() => {
-                    onChange(u.pmCode ?? u.name, u.id);
-                    setOpen(false);
-                  }}
-                  className="w-full text-left px-2 py-1 hover:bg-amber-50 rounded flex items-center justify-between text-[11px]"
-                >
-                  <span>{u.name}</span>
-                  <span className="text-[9px] font-mono text-slate-500">{u.pmCode ?? ""}</span>
-                </button>
-              ))}
+              <input
+                autoFocus
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="이름/코드 검색..."
+                className="w-full h-7 px-2 text-[11px] border border-slate-200 rounded outline-none focus:border-amber-300 mb-1"
+              />
+              <button
+                onClick={() => {
+                  onChange(null, null);
+                  setOpen(false);
+                }}
+                className="w-full text-left px-2 py-1 text-[10.5px] text-slate-400 hover:bg-slate-50 rounded"
+              >
+                비워두기
+              </button>
+              <button
+                onClick={() => {
+                  onChange(q.trim() || null, null);
+                  setOpen(false);
+                }}
+                disabled={!q.trim()}
+                className="w-full text-left px-2 py-1 text-[10.5px] text-amber-700 hover:bg-amber-50 rounded disabled:opacity-30"
+              >
+                직접 입력: <strong>{q.trim() || "—"}</strong>
+              </button>
+              <div className="max-h-48 overflow-auto mt-1 border-t border-slate-100 pt-1">
+                {filtered.map((u) => (
+                  <button
+                    key={u.id}
+                    onClick={() => {
+                      onChange(u.pmCode ?? u.name, u.id);
+                      setOpen(false);
+                    }}
+                    className="w-full text-left px-2 py-1 hover:bg-amber-50 rounded flex items-center justify-between text-[11px]"
+                  >
+                    <span>{u.name}</span>
+                    <span className="text-[9px] font-mono text-slate-500">{u.pmCode ?? ""}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        </>
-      )}
+          </>,
+          document.body
+        )}
     </div>
   );
 }

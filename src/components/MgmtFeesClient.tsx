@@ -425,6 +425,9 @@ function BudgetCard({
           {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
         </div>
         <span className="font-mono text-[11px] text-slate-500 tabular-nums w-10">#{String(b.seq).padStart(3, "0")}</span>
+        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold tabular-nums shrink-0">
+          {b.year}
+        </span>
         {b.bizCategory ? (
           <span
             className={clsx(

@@ -28,10 +28,18 @@ export default async function MgmtFeesPage({
   const years = await prisma.mgmtFeeBudget.groupBy({ by: ["year"], _count: true });
   const yearList = years.map((y) => y.year).sort((a, b) => b - a);
 
-  // 'year' 파라미터가 없거나 'all' 이면 전체보기 (기본). 숫자면 해당 연도만 필터.
+  // 기본은 현재(올해) — 연도별로 분리해서 보이도록.
+  // year=all 명시한 경우만 전체보기.
   const yearParam = searchParams.year;
-  const isAll = !yearParam || yearParam === "all";
-  const currentYear = isAll ? null : Number(yearParam);
+  const isAll = yearParam === "all";
+  const thisYear = new Date().getFullYear();
+  const currentYear = isAll
+    ? null
+    : yearParam
+      ? Number(yearParam)
+      : yearList.includes(thisYear)
+        ? thisYear
+        : yearList[0] ?? thisYear;
 
   const budgets = await prisma.mgmtFeeBudget.findMany({
     where: currentYear == null ? {} : { year: currentYear },
