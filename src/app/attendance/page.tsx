@@ -48,12 +48,41 @@ export default async function AttendancePage() {
 
   const offices = await getOfficeLocations();
 
+  // 관리자에게는 오늘 전체 내부직원 출퇴근 현황 동봉 (워크/관리자 모드 전환용)
+  let allTodayAttendance: any[] = [];
+  let internalUsers: any[] = [];
+  if (me.role === "admin") {
+    const t = new Date();
+    t.setHours(0, 0, 0, 0);
+    const tEnd = new Date(t);
+    tEnd.setDate(tEnd.getDate() + 1);
+
+    internalUsers = await prisma.user.findMany({
+      where: { status: "active", isInternal: true },
+      select: { id: true, name: true, dept: true, position: true },
+      orderBy: { name: "asc" },
+    });
+    allTodayAttendance = await prisma.attendance.findMany({
+      where: { date: { gte: t, lt: tEnd }, user: { isInternal: true, status: "active" } },
+      include: { user: { select: { id: true, name: true, dept: true, position: true } } },
+      orderBy: { checkIn: "asc" },
+    });
+  }
+
   return (
     <AttendanceClient
       me={{ ...myUser, isInternal: effectiveInternal, role: me.role }}
       today={today ? serialize(today) : null}
       records={serialize(records)}
       offices={offices}
+      adminData={
+        me.role === "admin"
+          ? {
+              allTodayAttendance: serialize(allTodayAttendance),
+              internalUsers,
+            }
+          : null
+      }
     />
   );
 }

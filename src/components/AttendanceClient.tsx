@@ -16,6 +16,9 @@ import {
   Building2,
   Star,
   Navigation,
+  Users as UsersIcon,
+  Briefcase,
+  RefreshCw,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -83,16 +86,26 @@ const STATUS_META: Record<string, { label: string; color: string }> = {
   holiday: { label: "공휴일", color: "bg-purple-100 text-purple-800" },
 };
 
+type AdminData = {
+  allTodayAttendance: (Attendance & {
+    user: { id: string; name: string; dept: string; position: string };
+    checkInDistance?: number | null;
+  })[];
+  internalUsers: { id: string; name: string; dept: string; position: string }[];
+};
+
 export default function AttendanceClient({
   me,
   today: initialToday,
   records: initialRecords,
   offices,
+  adminData,
 }: {
   me: { id: string; name: string; dept: string; position: string; isInternal: boolean; role: string };
   today: Attendance | null;
   records: Attendance[];
   offices: Office[];
+  adminData: AdminData | null;
 }) {
   const router = useRouter();
   const [today, setToday] = useState<Attendance | null>(initialToday);
@@ -100,6 +113,20 @@ export default function AttendanceClient({
   const [now, setNow] = useState(new Date());
   const [editing, setEditing] = useState<Attendance | null>(null);
   const isAdmin = me.role === "admin";
+
+  // 관리자: 워크/관리자 모드 토글 (localStorage 기억)
+  //   - HJK 처럼 본인이 출퇴근도 하는 admin 은 기본 'worker' 시작
+  //   - JHC/JYP 처럼 내부직원 아닌 admin 은 기본 'admin'
+  const [viewMode, setViewMode] = useState<"worker" | "admin">(() => {
+    if (typeof window === "undefined") return "worker";
+    const saved = window.localStorage.getItem("attendance_view_mode");
+    if (saved === "worker" || saved === "admin") return saved;
+    return me.isInternal ? "worker" : "admin";
+  });
+  function changeViewMode(m: "worker" | "admin") {
+    setViewMode(m);
+    if (typeof window !== "undefined") window.localStorage.setItem("attendance_view_mode", m);
+  }
 
   // GPS 추적
   const [pos, setPos] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
@@ -277,13 +304,54 @@ export default function AttendanceClient({
             <Clock className="w-4 h-4 text-brand-500" />
             <span className="text-xs text-slate-500">인사관리 ▸ 근태</span>
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight">{me.name} 근태</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {viewMode === "admin" ? "오늘 근무 현황" : `${me.name} 근태`}
+          </h1>
           <p className="text-sm text-slate-500 mt-1">
-            {me.dept} · {me.position}
+            {viewMode === "admin"
+              ? "관리자 모드 — 전체 내부직원 출퇴근 상황"
+              : `${me.dept} · ${me.position}`}
           </p>
         </div>
+        {/* 워크/관리자 토글 (admin 전용) */}
+        {isAdmin && adminData && (
+          <div className="inline-flex rounded-full bg-slate-100 p-0.5 shadow-sm">
+            <button
+              onClick={() => changeViewMode("worker")}
+              className={clsx(
+                "h-9 px-5 text-[13px] font-semibold rounded-full transition flex items-center gap-1.5",
+                viewMode === "worker"
+                  ? "bg-white text-brand-700 shadow"
+                  : "text-slate-500 hover:text-slate-700"
+              )}
+            >
+              <Briefcase className="w-3.5 h-3.5" /> 워크
+            </button>
+            <button
+              onClick={() => changeViewMode("admin")}
+              className={clsx(
+                "h-9 px-5 text-[13px] font-semibold rounded-full transition flex items-center gap-1.5",
+                viewMode === "admin"
+                  ? "bg-white text-brand-700 shadow"
+                  : "text-slate-500 hover:text-slate-700"
+              )}
+            >
+              <UsersIcon className="w-3.5 h-3.5" /> 관리자
+            </button>
+          </div>
+        )}
       </div>
 
+      {/* 관리자 모드 뷰 */}
+      {viewMode === "admin" && adminData && (
+        <AdminTodayView
+          data={adminData}
+          onRefresh={() => router.refresh()}
+        />
+      )}
+
+      {viewMode === "worker" && (
+      <>
       {/* 출퇴근 지사 선택 + 위치 상태 */}
       <div className="bg-white border border-slate-200 rounded-2xl p-4 mb-3 shadow-sm">
         <div className="flex items-center justify-between mb-2">
@@ -554,12 +622,267 @@ export default function AttendanceClient({
         )}
       </div>
 
+      </>
+      )}
+
       {/* admin 수정 모달 */}
       {editing && isAdmin && (
         <EditModal record={editing} onClose={() => setEditing(null)} onSave={saveEdit} />
       )}
     </div>
   );
+}
+
+/* ─────────── 관리자: 오늘 근무 현황 (워크/관리자 모드의 관리자) ─────────── */
+function AdminTodayView({
+  data,
+  onRefresh,
+}: {
+  data: AdminData;
+  onRefresh: () => void;
+}) {
+  const [refreshing, setRefreshing] = useState(false);
+  // 자동 새로고침 (30초)
+  useEffect(() => {
+    const t = setInterval(() => onRefresh(), 30000);
+    return () => clearInterval(t);
+  }, [onRefresh]);
+
+  const fmt = (d: string | null) => {
+    if (!d) return "--:--";
+    return new Date(d).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false });
+  };
+
+  // 분류: 근무중(체크인만) / 퇴근완료(체크아웃까지) / 미체크
+  const checkedInIds = new Set(data.allTodayAttendance.filter((a) => a.checkIn).map((a) => a.user.id));
+  const working = data.allTodayAttendance.filter((a) => a.checkIn && !a.checkOut);
+  const done = data.allTodayAttendance.filter((a) => a.checkIn && a.checkOut);
+  const noCheckin = data.internalUsers.filter((u) => !checkedInIds.has(u.id));
+
+  function handleRefresh() {
+    setRefreshing(true);
+    onRefresh();
+    setTimeout(() => setRefreshing(false), 700);
+  }
+
+  const todayStr = new Date().toLocaleDateString("ko-KR", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "long",
+  });
+
+  return (
+    <div className="space-y-4">
+      {/* 통계 */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatBox label="전체 내부직원" value={data.internalUsers.length} suffix="명" tone="slate" />
+        <StatBox label="근무 중" value={working.length} suffix="명" tone="emerald" />
+        <StatBox label="퇴근 완료" value={done.length} suffix="명" tone="violet" />
+        <StatBox label="미체크" value={noCheckin.length} suffix="명" tone="rose" />
+      </div>
+
+      {/* 오늘 근무 카드 */}
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold flex items-center gap-1.5">
+              <UsersIcon className="w-3.5 h-3.5 text-brand-500" /> 오늘 근무
+            </h2>
+            <span className="text-[10.5px] text-slate-500">{todayStr}</span>
+          </div>
+          <button
+            onClick={handleRefresh}
+            className="h-7 px-2.5 text-[11px] text-slate-600 hover:text-brand-600 hover:bg-brand-50 rounded inline-flex items-center gap-1"
+            title="30초마다 자동 새로고침"
+          >
+            <RefreshCw className={clsx("w-3 h-3", refreshing && "animate-spin")} /> 새로고침
+          </button>
+        </div>
+
+        {/* 근무 중 */}
+        <Section title="근무 중인 직원" count={working.length} tone="emerald">
+          {working.length === 0 ? (
+            <EmptyRow text="현재 근무 중인 직원이 없습니다" />
+          ) : (
+            working.map((a) => (
+              <PersonRow
+                key={a.id}
+                name={a.user.name}
+                dept={a.user.dept}
+                position={a.user.position}
+                checkIn={fmt(a.checkIn)}
+                checkOut={fmt(a.checkOut)}
+                status="working"
+                distance={a.checkInDistance}
+              />
+            ))
+          )}
+        </Section>
+
+        {/* 퇴근 완료 */}
+        <Section title="퇴근한 직원" count={done.length} tone="violet">
+          {done.length === 0 ? (
+            <EmptyRow text="아직 퇴근 기록이 없습니다" />
+          ) : (
+            done.map((a) => (
+              <PersonRow
+                key={a.id}
+                name={a.user.name}
+                dept={a.user.dept}
+                position={a.user.position}
+                checkIn={fmt(a.checkIn)}
+                checkOut={fmt(a.checkOut)}
+                status="done"
+              />
+            ))
+          )}
+        </Section>
+
+        {/* 미체크 */}
+        {noCheckin.length > 0 && (
+          <Section title="아직 출근 안 한 직원" count={noCheckin.length} tone="rose">
+            {noCheckin.map((u) => (
+              <div key={u.id} className="px-4 py-2.5 border-b border-slate-50 hover:bg-slate-50/40">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 text-xs font-semibold flex items-center justify-center">
+                    {u.name.slice(0, 1)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-semibold text-slate-700">{u.name}</div>
+                    <div className="text-[10.5px] text-slate-400">
+                      {u.dept} · {u.position}
+                    </div>
+                  </div>
+                  <div className="text-[11px] text-rose-600 font-medium">미출근</div>
+                </div>
+              </div>
+            ))}
+          </Section>
+        )}
+      </div>
+
+      <div className="text-center text-[10.5px] text-slate-400">
+        30초마다 자동 새로고침됩니다 · 직원이 출퇴근을 찍으면 곧 반영됩니다
+      </div>
+    </div>
+  );
+}
+
+function StatBox({
+  label,
+  value,
+  suffix,
+  tone,
+}: {
+  label: string;
+  value: number;
+  suffix?: string;
+  tone: "slate" | "emerald" | "violet" | "rose";
+}) {
+  const c = {
+    slate: "bg-slate-50 border-slate-200 text-slate-700",
+    emerald: "bg-emerald-50 border-emerald-200 text-emerald-700",
+    violet: "bg-violet-50 border-violet-200 text-violet-700",
+    rose: "bg-rose-50 border-rose-200 text-rose-700",
+  }[tone];
+  return (
+    <div className={clsx("border rounded-xl p-3", c)}>
+      <div className="text-[11px] opacity-80">{label}</div>
+      <div className="text-2xl font-bold tabular-nums mt-0.5">
+        {value}
+        <span className="text-[12px] ml-0.5 opacity-70">{suffix}</span>
+      </div>
+    </div>
+  );
+}
+
+function Section({
+  title,
+  count,
+  tone,
+  children,
+}: {
+  title: string;
+  count: number;
+  tone: "emerald" | "violet" | "rose";
+  children: React.ReactNode;
+}) {
+  const badge = {
+    emerald: "bg-emerald-100 text-emerald-700",
+    violet: "bg-violet-100 text-violet-700",
+    rose: "bg-rose-100 text-rose-700",
+  }[tone];
+  return (
+    <div>
+      <div className="px-4 py-2 bg-slate-50/60 border-b border-slate-100 flex items-center gap-1.5">
+        <span className="text-[12px] font-semibold text-slate-700">{title}</span>
+        <span className={clsx("text-[10.5px] px-1.5 py-0.5 rounded font-semibold tabular-nums", badge)}>
+          {count}
+        </span>
+      </div>
+      <div>{children}</div>
+    </div>
+  );
+}
+
+function PersonRow({
+  name,
+  dept,
+  position,
+  checkIn,
+  checkOut,
+  status,
+  distance,
+}: {
+  name: string;
+  dept: string;
+  position: string;
+  checkIn: string;
+  checkOut: string;
+  status: "working" | "done";
+  distance?: number | null;
+}) {
+  return (
+    <div className="px-4 py-2.5 border-b border-slate-50 hover:bg-slate-50/40">
+      <div className="flex items-center gap-3">
+        <div
+          className={clsx(
+            "relative w-8 h-8 rounded-full text-white text-xs font-semibold flex items-center justify-center shrink-0",
+            status === "working"
+              ? "bg-gradient-to-br from-emerald-400 to-emerald-600"
+              : "bg-gradient-to-br from-violet-400 to-violet-600"
+          )}
+        >
+          {name.slice(0, 1)}
+          {status === "working" && (
+            <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white" />
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-[13px] font-semibold text-slate-800">{name}</div>
+          <div className="text-[10.5px] text-slate-500">
+            {dept} · {position}
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="flex items-center gap-3 text-[11.5px] tabular-nums">
+            <span className="text-emerald-700 font-semibold">출근 {checkIn}</span>
+            <span className={clsx(status === "done" ? "text-rose-700 font-semibold" : "text-slate-300")}>
+              퇴근 {checkOut}
+            </span>
+          </div>
+          {distance != null && (
+            <div className="text-[9.5px] text-slate-400 mt-0.5">({Math.round(distance)}m)</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmptyRow({ text }: { text: string }) {
+  return <div className="px-4 py-4 text-center text-[11.5px] text-slate-400">{text}</div>;
 }
 
 function EditModal({
