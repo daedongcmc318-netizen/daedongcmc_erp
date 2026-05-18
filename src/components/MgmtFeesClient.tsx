@@ -132,12 +132,15 @@ export default function MgmtFeesClient({
 
   const totals = useMemo(() => {
     let mgmt = 0;
+    let payable = 0;
     let spent = 0;
     for (const b of filtered) {
       mgmt += Number(b.mgmtFeeAmount ?? 0);
+      payable += Number(b.payableTotal ?? 0);
       for (const e of b.expenses) spent += Number(e.amount ?? 0);
     }
-    return { mgmt, spent, balance: mgmt - spent };
+    // 잔액 = 지급총액(사업비) − 실제 집행
+    return { mgmt, payable, spent, balance: payable - spent };
   }, [filtered]);
 
   async function createBudget() {
@@ -254,7 +257,8 @@ export default function MgmtFeesClient({
           <h1 className="text-2xl font-semibold tracking-tight">{currentYear}년 업체별 관리비</h1>
           <p className="text-sm text-slate-500 mt-1">
             총 사업 <span className="font-semibold text-slate-700">{filtered.length}건</span> · 관리비 합계{" "}
-            <span className="font-semibold text-slate-700">{fmtKRW(totals.mgmt)}</span> · 집행{" "}
+            <span className="font-semibold text-slate-700">{fmtKRW(totals.mgmt)}</span> · 지급총액{" "}
+            <span className="font-semibold text-slate-700">{fmtKRW(totals.payable)}</span> · 집행{" "}
             <span className="font-semibold text-rose-600">{fmtKRW(totals.spent)}</span> · 잔액{" "}
             <span className={clsx("font-semibold", totals.balance < 0 ? "text-rose-600" : "text-emerald-600")}>
               {fmtKRW(totals.balance)}
@@ -405,7 +409,9 @@ function BudgetCard({
 }) {
   const totalSpent = b.expenses.reduce((acc, e) => acc + Number(e.amount ?? 0), 0);
   const mgmtFee = Number(b.mgmtFeeAmount ?? 0);
-  const remaining = mgmtFee - totalSpent;
+  const payable = Number(b.payableTotal ?? 0);
+  // 잔액 = 사업비(지급총액) − 실제 집행 합계. 부가세 제외 공급가액 기준.
+  const remaining = payable - totalSpent;
   const projectOptions = projects.filter((p) => !b.clientCompanyId || p.companyId === b.clientCompanyId);
 
   return (
@@ -457,6 +463,8 @@ function BudgetCard({
           </div>
           <div className="flex items-center gap-3 text-[11px] text-slate-500">
             <span>관리비 <strong className="text-slate-700">{fmtKRW(b.mgmtFeeAmount)}</strong></span>
+            <span>·</span>
+            <span>지급총액 <strong className="text-slate-700">{fmtKRW(b.payableTotal)}</strong></span>
             <span>·</span>
             <span>집행 <strong className="text-rose-600">{fmtKRW(totalSpent)}</strong></span>
             <span>·</span>
@@ -572,33 +580,34 @@ function BudgetCard({
                   tone="rose"
                 />
                 {(() => {
-                  const rem = (Number(b.mgmtFeeAmount) || 0) - (Number(b.payableTotal) || 0);
+                  // 잔액 = 지급총액(사업비) − 실제 집행 합계 (부가세 제외, 공급가액 기준)
+                  const rem = payable - totalSpent;
                   return (
                     <ReadonlyBox
-                      label="잔액 (예산-지급)"
+                      label="잔액 (지급-집행)"
                       value={rem === 0 ? "—" : fmtKRW(rem)}
                       tone={rem < 0 ? "rose" : rem > 0 ? "emerald" : "slate"}
                     />
                   );
                 })()}
               </div>
-              {/* 지출 진척도 */}
-              {Number(b.mgmtFeeAmount) > 0 && (
+              {/* 지출 진척도 — 실제 집행(지출 합) / 지급총액(사업비) */}
+              {payable > 0 && (
                 <div className="mt-2">
                   <div className="flex justify-between text-[10px] text-slate-500 mb-0.5">
-                    <span>지출 진척도</span>
+                    <span>지출 진척도 (집행 / 지급총액)</span>
                     <span className="tabular-nums">
-                      {((Number(b.payableTotal) / Number(b.mgmtFeeAmount)) * 100).toFixed(0)}%
+                      {((totalSpent / payable) * 100).toFixed(0)}%
                     </span>
                   </div>
                   <div className="h-1.5 rounded-full overflow-hidden bg-slate-100">
                     <div
                       className={clsx(
                         "h-full",
-                        Number(b.payableTotal) > Number(b.mgmtFeeAmount) ? "bg-rose-500" : "bg-emerald-500"
+                        totalSpent > payable ? "bg-rose-500" : "bg-emerald-500"
                       )}
                       style={{
-                        width: `${Math.min(100, (Number(b.payableTotal) / Number(b.mgmtFeeAmount)) * 100)}%`,
+                        width: `${Math.min(100, (totalSpent / payable) * 100)}%`,
                       }}
                     />
                   </div>
