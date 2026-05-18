@@ -12,6 +12,8 @@ export type User = {
   id: string;
   empNo: string;
   name: string;
+  isPM?: boolean;
+  isInternal?: boolean;
   residentNo: string | null;
   email: string | null;
   phone: string | null;
@@ -32,7 +34,6 @@ export type User = {
   postCode: string | null;
   address: string | null;
   passportNo: string | null;
-  isInternal?: boolean;
   consultantGrade?: string | null;
   consultantRate?: string | null; // BigInt → string when serialized
 };
@@ -265,7 +266,14 @@ export default function UsersClient({ initialUsers }: { initialUsers: User[] }) 
                   <td className="text-center text-[10px] text-slate-400 tabular-nums px-2 py-1.5">{i + 1}</td>
                   <td className="px-2.5 py-1.5 font-mono text-[11px] text-brand-700 font-medium">{u.empNo}</td>
                   <td className={clsx("px-2.5 py-1.5 font-medium", u.status === "inactive" ? "text-slate-400" : "text-slate-800")}>
-                    {u.name}
+                    <span className="inline-flex items-center gap-1">
+                      {u.name}
+                      {u.isPM && (
+                        <span className="text-[9px] px-1 py-0.5 rounded bg-violet-100 text-violet-700 ring-1 ring-violet-200 font-semibold">
+                          PM
+                        </span>
+                      )}
+                    </span>
                   </td>
                   <td className="text-center px-2 py-1.5">
                     <StatusBadge status={u.status} />

@@ -43,7 +43,7 @@ export default async function ProjectsPage({
     prisma.user.findMany({
       where: { status: "active" },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, pmCode: true, position: true, isInternal: true },
+      select: { id: true, name: true, pmCode: true, position: true, isInternal: true, isPM: true },
     }),
     // DB에 존재하는 모든 연도 (버튼 표시용)
     prisma.project.findMany({

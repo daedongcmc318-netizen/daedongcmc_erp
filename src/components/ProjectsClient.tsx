@@ -91,7 +91,7 @@ type Project = {
 };
 
 type Company = { id: string; name: string; type: string };
-type User = { id: string; name: string; pmCode: string | null; position: string; isInternal?: boolean };
+type User = { id: string; name: string; pmCode: string | null; position: string; isInternal?: boolean; isPM?: boolean };
 
 // 발굴 시트 컬럼 (엑셀 순서 그대로)
 const DISCOVERY_COLS = [
@@ -1334,9 +1334,18 @@ function renderCell(
         <InlineText value={p.region ?? ""} onSave={(v) => onPatch({ region: v })} placeholder="—" />
       );
     case "pmCode": {
-      const pmOptions = users
-        .filter((u) => u.pmCode)
-        .map((u) => ({ value: u.pmCode as string, label: u.pmCode as string }));
+      // PM = isPM=true 인 사용자만 드롭다운 노출 (내부 + 외부위원 8명).
+      // 기존 프로젝트가 비-PM 사용자의 코드를 갖고 있으면 그 코드도 백업 옵션으로 노출 (수정 가능하게)
+      const pmUsers = users.filter((u) => u.pmCode && u.isPM);
+      const pmCodes = new Set(pmUsers.map((u) => u.pmCode));
+      const legacyOpt =
+        p.pmCode && !pmCodes.has(p.pmCode)
+          ? [{ value: p.pmCode, label: `${p.pmCode} (구)` }]
+          : [];
+      const pmOptions = [
+        ...legacyOpt,
+        ...pmUsers.map((u) => ({ value: u.pmCode as string, label: u.pmCode as string })),
+      ];
       return (
         <PillSelect
           value={p.pmCode}

@@ -6,7 +6,7 @@ import { serializeProject } from "@/lib/serialize";
 const DATE_FIELDS = ["joinDate", "leaveDate"];
 const FLOAT_FIELDS = ["annualLeaveTotal", "annualLeaveUsed"];
 const BIGINT_FIELDS = ["consultantRate"];
-const BOOL_FIELDS = ["isInternal"];
+const BOOL_FIELDS = ["isInternal", "isPM"];
 const ALLOWED = new Set([
   "empNo",
   "name",
@@ -36,6 +36,7 @@ const ALLOWED = new Set([
   "annualLeaveTotal",
   "annualLeaveUsed",
   "isInternal",
+  "isPM",
   "consultantGrade",
   "consultantRate",
 ]);

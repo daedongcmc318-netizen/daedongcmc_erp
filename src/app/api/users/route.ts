@@ -63,6 +63,8 @@ export async function POST(req: NextRequest) {
       accountHolder: body.accountHolder || null,
       postCode: body.postCode || null,
       address: body.address || null,
+      isInternal: !!body.isInternal,
+      isPM: !!body.isPM,
     };
     const u = await prisma.user.create({ data });
     revalidatePath("/users");

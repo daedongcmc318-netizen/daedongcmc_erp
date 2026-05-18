@@ -200,7 +200,7 @@ export default function UserModal({
                       className="form-input"
                     />
                   </Field>
-                  <Field label="내부직원 (근태·연차 대상)">
+                  <Field label="내부직원 (근태·연차·담당자 대상)">
                     <label className="flex items-center gap-2 h-9 px-3 border border-slate-200 rounded bg-white cursor-pointer hover:border-brand-300">
                       <input
                         type="checkbox"
@@ -210,6 +210,19 @@ export default function UserModal({
                       />
                       <span className="text-[12px] text-slate-700">
                         {(draft as any).isInternal ? "내부직원 (활성)" : "외부/위촉 (비활성)"}
+                      </span>
+                    </label>
+                  </Field>
+                  <Field label="PM 등록 (프로젝트 PM 드롭다운 노출)">
+                    <label className="flex items-center gap-2 h-9 px-3 border border-slate-200 rounded bg-white cursor-pointer hover:border-brand-300">
+                      <input
+                        type="checkbox"
+                        checked={!!(draft as any).isPM}
+                        onChange={(e) => set("isPM" as any, e.target.checked as any)}
+                        className="rounded border-slate-300 text-brand-600 focus:ring-brand-300 w-4 h-4"
+                      />
+                      <span className="text-[12px] text-slate-700">
+                        {(draft as any).isPM ? "PM 자격 보유 (PM 드롭다운 노출)" : "PM 아님"}
                       </span>
                     </label>
                   </Field>
