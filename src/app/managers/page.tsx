@@ -37,14 +37,23 @@ export default async function ManagersPage({
   });
   const mMap = new Map(allCandidates.map((m) => [m.id, m]));
 
-  // 추가 정보 (진행중 / 사업영역별)
-  // 진행중 = 완료보고(finalReportYn) 체크되기 전 모든 단계
-  const inProgressGroups = await prisma.project.groupBy({
-    by: ["managerId"],
-    where: { year, managerId: { not: null }, finalReportYn: false },
-    _count: true,
-  });
+  // 추가 정보 (진행중 / 완료 / 사업영역별)
+  //   진행중 = 완료보고(finalReportYn) 미체크
+  //   완료   = 완료보고(finalReportYn) 체크됨
+  const [inProgressGroups, doneGroups] = await Promise.all([
+    prisma.project.groupBy({
+      by: ["managerId"],
+      where: { year, managerId: { not: null }, finalReportYn: false },
+      _count: true,
+    }),
+    prisma.project.groupBy({
+      by: ["managerId"],
+      where: { year, managerId: { not: null }, finalReportYn: true },
+      _count: true,
+    }),
+  ]);
   const inProgressMap = new Map(inProgressGroups.map((g) => [g.managerId!, g._count]));
+  const doneMap = new Map(doneGroups.map((g) => [g.managerId!, g._count]));
 
   const bizGroups = await prisma.project.groupBy({
     by: ["managerId", "bizCategory"],
@@ -70,6 +79,7 @@ export default async function ManagersPage({
     manager: typeof allCandidates[0];
     total: number;
     inProg: number;
+    done: number;
     biz: Map<string, number>;
   }[] = [];
   for (const g of grouped) {
@@ -79,13 +89,14 @@ export default async function ManagersPage({
       manager: m,
       total: g._count,
       inProg: inProgressMap.get(g.managerId!) ?? 0,
+      done: doneMap.get(g.managerId!) ?? 0,
       biz: bizMap.get(g.managerId!) ?? new Map(),
     });
   }
   // 프로젝트 없는 내부직원 추가
   for (const m of allCandidates) {
     if (projectIdSet.has(m.id)) continue;
-    cards.push({ manager: m, total: 0, inProg: 0, biz: new Map() });
+    cards.push({ manager: m, total: 0, inProg: 0, done: 0, biz: new Map() });
   }
   cards.sort((a, b) => b.total - a.total || a.manager.name.localeCompare(b.manager.name));
 
@@ -155,9 +166,10 @@ export default async function ManagersPage({
                 <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-brand-600 group-hover:translate-x-0.5 transition" />
               </div>
 
-              <div className="grid grid-cols-2 gap-2 mb-3">
+              <div className="grid grid-cols-3 gap-2 mb-3">
                 <Stat icon={<FolderKanban className="w-3 h-3" />} label="총 프로젝트" value={`${c.total}건`} color="brand" />
-                <Stat icon={<Activity className="w-3 h-3" />} label="진행중" value={`${c.inProg}건`} color="emerald" />
+                <Stat icon={<Activity className="w-3 h-3" />} label="진행중" value={`${c.inProg}건`} color="amber" />
+                <Stat icon={<Activity className="w-3 h-3" />} label="완료" value={`${c.done}건`} color="emerald" />
               </div>
 
               {/* 사업영역 분포 막대 */}
@@ -208,11 +220,12 @@ function Stat({
   icon: React.ReactNode;
   label: string;
   value: string;
-  color: "brand" | "emerald";
+  color: "brand" | "emerald" | "amber";
 }) {
   const palette = {
     brand: { bg: "bg-brand-50", text: "text-brand-700" },
     emerald: { bg: "bg-emerald-50", text: "text-emerald-700" },
+    amber: { bg: "bg-amber-50", text: "text-amber-700" },
   }[color];
   return (
     <div className={`rounded-lg ${palette.bg} px-2.5 py-1.5`}>

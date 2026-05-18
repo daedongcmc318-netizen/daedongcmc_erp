@@ -97,25 +97,28 @@ export default function TrackRecordsClient({
 }) {
   const router = useRouter();
   const [records, setRecords] = useState<TrackRecord[]>(initialRecords);
-  const [tab, setTab] = useState<"innovation" | "export">("innovation");
+  // 메인 탭: 카테고리 6종 (컨설팅/기술지원/마케팅/인증/용역/기타)
+  // 서브탭: 사업 구분 (혁신/수출/TP/기타) — 카테고리 안에서 추가 필터
+  const [tab, setTab] = useState<string>("consulting");
+  const [subTab, setSubTab] = useState<string>(""); // "" = 전체
   const [search, setSearch] = useState("");
   const [filterYear, setFilterYear] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterProgram, setFilterProgram] = useState("");
-  const [filterCategory, setFilterCategory] = useState("");
   const [pickerFor, setPickerFor] = useState<string | null>(null);
 
-  const tabRecords = useMemo(() => records.filter((r) => r.type === tab), [records, tab]);
+  // 현재 탭(카테고리) 안의 레코드
+  const tabRecords = useMemo(
+    () => records.filter((r) => (tab === "etc" ? !r.category || r.category === "etc" : r.category === tab)),
+    [records, tab]
+  );
 
   const filtered = useMemo(() => {
     return tabRecords.filter((r) => {
+      if (subTab && r.type !== subTab) return false;
       if (filterYear && String(r.year) !== filterYear) return false;
       if (filterStatus && r.status !== filterStatus) return false;
       if (filterProgram && r.supportProgram !== filterProgram) return false;
-      if (filterCategory) {
-        if (filterCategory === "_null" && r.category) return false;
-        else if (filterCategory !== "_null" && r.category !== filterCategory) return false;
-      }
       if (search.trim()) {
         const q = search.toLowerCase();
         const hay = [
@@ -135,14 +138,31 @@ export default function TrackRecordsClient({
       }
       return true;
     });
-  }, [tabRecords, search, filterYear, filterStatus, filterProgram, filterCategory]);
+  }, [tabRecords, search, subTab, filterYear, filterStatus, filterProgram]);
 
+  // 카테고리 탭 카운트 (전체 records 기준)
   const categoryCounts = useMemo(() => {
-    const c: Record<string, number> = { consulting: 0, tech_support: 0, marketing: 0, service: 0, certification: 0, etc: 0, _null: 0 };
+    const c: Record<string, number> = {
+      consulting: 0,
+      tech_support: 0,
+      marketing: 0,
+      certification: 0,
+      service: 0,
+      etc: 0,
+    };
+    for (const r of records) {
+      if (r.category && c[r.category] !== undefined) c[r.category]++;
+      else c.etc++; // null 또는 정의안된 category 는 기타로
+    }
+    return c;
+  }, [records]);
+
+  // 사업 구분(type) 서브탭 카운트 — 현재 카테고리 안에서
+  const subCounts = useMemo(() => {
+    const c: Record<string, number> = {};
     for (const r of tabRecords) {
-      if (!r.category) c._null++;
-      else if (c[r.category] !== undefined) c[r.category]++;
-      else c.etc++;
+      const k = r.type || "etc";
+      c[k] = (c[k] ?? 0) + 1;
     }
     return c;
   }, [tabRecords]);
@@ -151,11 +171,6 @@ export default function TrackRecordsClient({
     () => filtered.reduce((acc, r) => acc + Number(r.serviceFee ?? 0), 0),
     [filtered]
   );
-
-  const counts = {
-    innovation: records.filter((r) => r.type === "innovation").length,
-    export: records.filter((r) => r.type === "export").length,
-  };
 
   async function patchRecord(id: string, patch: Record<string, any>) {
     setRecords((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
@@ -188,11 +203,13 @@ export default function TrackRecordsClient({
   }
 
   async function createRecord() {
+    // 새 실적은 현재 카테고리(tab) + 현재 서브탭(subTab) 으로 사전 분류
     const res = await fetch("/api/track-records", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        type: tab,
+        type: subTab || "innovation", // 서브탭 미선택 시 기본 innovation
+        category: tab === "etc" ? null : tab,
         serviceName: "(신규)",
         clientName: "(미지정)",
       }),
@@ -224,7 +241,7 @@ export default function TrackRecordsClient({
           <h1 className="text-2xl font-semibold tracking-tight">서비스 수행 실적</h1>
           <p className="text-sm text-slate-500 mt-1">
             현재 탭 <strong className="text-slate-700">{filtered.length}건</strong> / 전체{" "}
-            {counts.innovation + counts.export}건 · 금액 합계{" "}
+            {records.length}건 · 금액 합계{" "}
             <strong className="text-slate-700">{fmtKRW(totalFee)}</strong>
           </p>
         </div>
@@ -236,14 +253,40 @@ export default function TrackRecordsClient({
         </button>
       </div>
 
-      {/* 탭 */}
-      <div className="flex items-center gap-1 mb-3 border-b border-slate-200">
-        <TabBtn active={tab === "innovation"} onClick={() => setTab("innovation")} count={counts.innovation}>
-          <Sparkles className="w-3.5 h-3.5" /> 혁신
-        </TabBtn>
-        <TabBtn active={tab === "export"} onClick={() => setTab("export")} count={counts.export}>
-          <Globe className="w-3.5 h-3.5" /> 수출
-        </TabBtn>
+      {/* 메인 탭 — 카테고리 6종 */}
+      <div className="flex items-center gap-1 mb-2 border-b border-slate-200 overflow-x-auto">
+        <CategoryTab active={tab === "consulting"} onClick={() => { setTab("consulting"); setSubTab(""); }} count={categoryCounts.consulting} color="violet">
+          컨설팅
+        </CategoryTab>
+        <CategoryTab active={tab === "tech_support"} onClick={() => { setTab("tech_support"); setSubTab(""); }} count={categoryCounts.tech_support} color="blue">
+          기술지원
+        </CategoryTab>
+        <CategoryTab active={tab === "marketing"} onClick={() => { setTab("marketing"); setSubTab(""); }} count={categoryCounts.marketing} color="rose">
+          마케팅
+        </CategoryTab>
+        <CategoryTab active={tab === "certification"} onClick={() => { setTab("certification"); setSubTab(""); }} count={categoryCounts.certification} color="emerald">
+          인증
+        </CategoryTab>
+        <CategoryTab active={tab === "service"} onClick={() => { setTab("service"); setSubTab(""); }} count={categoryCounts.service} color="amber">
+          용역
+        </CategoryTab>
+        <CategoryTab active={tab === "etc"} onClick={() => { setTab("etc"); setSubTab(""); }} count={categoryCounts.etc} color="slate">
+          기타
+        </CategoryTab>
+      </div>
+
+      {/* 서브 탭 — 사업 구분 (혁신/수출/TP/기타) — 현재 카테고리 안 카운트 */}
+      <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+        <SubTabPill active={subTab === ""} onClick={() => setSubTab("")} count={tabRecords.length}>
+          전체
+        </SubTabPill>
+        {Object.entries(subCounts)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([type, count]) => (
+            <SubTabPill key={type} active={subTab === type} onClick={() => setSubTab(type)} count={count}>
+              {SUB_TYPE_LABEL[type] ?? type}
+            </SubTabPill>
+          ))}
       </div>
 
       {/* 필터 */}
@@ -264,28 +307,13 @@ export default function TrackRecordsClient({
           </>
         )}
         <FilterSelect value={filterStatus} onChange={setFilterStatus} label="진행상태" options={usedStatuses.map((s) => ({ value: s, label: s }))} />
-        <FilterSelect
-          value={filterCategory}
-          onChange={setFilterCategory}
-          label="카테고리"
-          options={[
-            { value: "consulting", label: `컨설팅 (${categoryCounts.consulting})` },
-            { value: "tech_support", label: `기술지원 (${categoryCounts.tech_support})` },
-            { value: "marketing", label: `마케팅 (${categoryCounts.marketing})` },
-            { value: "service", label: `용역 (${categoryCounts.service})` },
-            { value: "certification", label: `인증 (${categoryCounts.certification})` },
-            { value: "etc", label: `기타 (${categoryCounts.etc})` },
-            { value: "_null", label: `미분류 (${categoryCounts._null})` },
-          ]}
-        />
-        {(search || filterYear || filterStatus || filterProgram || filterCategory) && (
+        {(search || filterYear || filterStatus || filterProgram) && (
           <button
             onClick={() => {
               setSearch("");
               setFilterYear("");
               setFilterStatus("");
               setFilterProgram("");
-              setFilterCategory("");
             }}
             className="text-[11px] text-slate-500 hover:text-slate-800 flex items-center gap-1 px-2 h-7"
           >
@@ -300,8 +328,9 @@ export default function TrackRecordsClient({
       {/* 표 */}
       <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
         <div className="overflow-auto max-h-[calc(100vh-280px)]">
-          {tab === "innovation" ? (
-            <InnovationTable
+          {/* 서브탭이 수출이면 ExportTable (국가/지역/지원사업 등 추가 컬럼), 그 외 InnovationTable */}
+          {subTab === "export" ? (
+            <ExportTable
               records={filtered}
               onPatch={patchRecord}
               onDelete={deleteRecord}
@@ -309,7 +338,7 @@ export default function TrackRecordsClient({
               onUnlinkInvoice={(id) => linkInvoice(id, null)}
             />
           ) : (
-            <ExportTable
+            <InnovationTable
               records={filtered}
               onPatch={patchRecord}
               onDelete={deleteRecord}
@@ -336,6 +365,95 @@ export default function TrackRecordsClient({
         );
       })()}
     </div>
+  );
+}
+
+/** 사업 구분(type) 한글 라벨 매핑 */
+const SUB_TYPE_LABEL: Record<string, string> = {
+  innovation: "혁신",
+  export: "수출",
+  tp: "TP",
+  contract: "용역",
+  certification: "인증",
+  rental: "임대",
+  etc: "기타",
+};
+
+/** 메인 카테고리 탭 */
+function CategoryTab({
+  active,
+  onClick,
+  count,
+  color,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  count: number;
+  color: "violet" | "blue" | "rose" | "emerald" | "amber" | "slate";
+  children: React.ReactNode;
+}) {
+  const palette = {
+    violet: { border: "border-violet-500", text: "text-violet-700", badge: "bg-violet-100 text-violet-700" },
+    blue: { border: "border-blue-500", text: "text-blue-700", badge: "bg-blue-100 text-blue-700" },
+    rose: { border: "border-rose-500", text: "text-rose-700", badge: "bg-rose-100 text-rose-700" },
+    emerald: { border: "border-emerald-500", text: "text-emerald-700", badge: "bg-emerald-100 text-emerald-700" },
+    amber: { border: "border-amber-500", text: "text-amber-700", badge: "bg-amber-100 text-amber-700" },
+    slate: { border: "border-slate-500", text: "text-slate-700", badge: "bg-slate-100 text-slate-700" },
+  }[color];
+  return (
+    <button
+      onClick={onClick}
+      className={clsx(
+        "px-3 py-2 text-[13px] font-medium border-b-2 -mb-px transition flex items-center gap-1.5 whitespace-nowrap",
+        active ? `${palette.border} ${palette.text}` : "border-transparent text-slate-500 hover:text-slate-800"
+      )}
+    >
+      {children}
+      <span
+        className={clsx(
+          "text-[10px] px-1.5 py-0.5 rounded-full tabular-nums font-medium",
+          active ? palette.badge : "bg-slate-100 text-slate-500"
+        )}
+      >
+        {count}
+      </span>
+    </button>
+  );
+}
+
+/** 서브탭 — 사업 구분 (혁신/수출/TP/...) — pill 형태 */
+function SubTabPill({
+  active,
+  onClick,
+  count,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  count: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={clsx(
+        "px-2.5 h-7 text-[11.5px] font-medium rounded-full border transition inline-flex items-center gap-1",
+        active
+          ? "bg-slate-800 text-white border-slate-800"
+          : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+      )}
+    >
+      {children}
+      <span
+        className={clsx(
+          "text-[10px] px-1 py-0.5 rounded tabular-nums",
+          active ? "bg-white/20" : "bg-slate-100"
+        )}
+      >
+        {count}
+      </span>
+    </button>
   );
 }
 
