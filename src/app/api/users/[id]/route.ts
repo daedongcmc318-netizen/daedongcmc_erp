@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { serializeProject } from "@/lib/serialize";
 
 const DATE_FIELDS = ["joinDate", "leaveDate"];
 const FLOAT_FIELDS = ["annualLeaveTotal", "annualLeaveUsed"];
@@ -69,10 +70,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       await prisma.user.update({ where: { id: conflict.id }, data: { pmCode: null } });
     }
   }
-  const updated = await prisma.user.update({ where: { id: params.id }, data });
-  revalidatePath("/users");
-  revalidatePath("/");
-  return NextResponse.json(updated);
+  try {
+    const updated = await prisma.user.update({ where: { id: params.id }, data });
+    revalidatePath("/users");
+    revalidatePath("/");
+    // consultantRate(BigInt) 안전 직렬화
+    return NextResponse.json(serializeProject(updated));
+  } catch (err: any) {
+    console.error("[USER PATCH ERROR]", err);
+    return NextResponse.json(
+      { error: err?.message ?? "수정 실패", code: err?.code },
+      { status: 500 }
+    );
+  }
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
