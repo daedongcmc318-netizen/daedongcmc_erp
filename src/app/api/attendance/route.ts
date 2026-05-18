@@ -38,23 +38,35 @@ export async function POST(req: NextRequest) {
     where: { userId_date: { userId: me.id, date: today } },
   });
 
-  // GPS 검증 (lat/lng가 있을 때만, admin은 검증 우회 옵션 없음 - 모두 GPS 필요)
+  // GPS 검증 — 출근/퇴근 시 lat/lng 필수 + 반경 강제
   let distance: number | null = null;
-  if ((action === "check_in" || action === "check_out") && lat != null && lng != null) {
+  if (action === "check_in" || action === "check_out") {
+    if (lat == null || lng == null) {
+      return NextResponse.json(
+        {
+          error: "위치 정보(GPS)가 필요합니다. 휴대폰 위치 권한을 허용하고 다시 시도하세요.",
+        },
+        { status: 400 }
+      );
+    }
     const office = await getOfficeLocation();
-    if (office) {
-      distance = haversineMeters(Number(lat), Number(lng), office.lat, office.lng);
-      // admin이 아닌 경우 반경 초과 시 차단
-      if (me.role !== "admin" && distance > office.radiusM) {
-        return NextResponse.json(
-          {
-            error: `사무실에서 너무 멉니다. 현재 ${Math.round(distance)}m (허용 반경 ${office.radiusM}m)`,
-            distance,
-            officeRadius: office.radiusM,
-          },
-          { status: 403 }
-        );
-      }
+    if (!office) {
+      return NextResponse.json(
+        { error: "사무실 위치가 설정되지 않았습니다. 관리자에게 문의하세요." },
+        { status: 500 }
+      );
+    }
+    distance = haversineMeters(Number(lat), Number(lng), office.lat, office.lng);
+    // 반경 초과 시 차단 — admin도 동일하게 적용. 예외 처리가 필요하면 관리자가 /attendance 페이지에서 수동 편집.
+    if (distance > office.radiusM) {
+      return NextResponse.json(
+        {
+          error: `사무실에서 너무 멉니다. 현재 ${Math.round(distance)}m (허용 반경 ${office.radiusM}m, 기준: ${office.name})`,
+          distance,
+          officeRadius: office.radiusM,
+        },
+        { status: 403 }
+      );
     }
   }
 
