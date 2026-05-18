@@ -312,7 +312,7 @@ export default function PersonalDashboardClient({
                   <ChevronLeft className="w-3.5 h-3.5" />
                 </button>
                 <div className="text-[12px] font-semibold tabular-nums px-2 min-w-[140px] text-center">
-                  {fmtShort(days[0])} – {fmtShort(days[6])}
+                  {fmtShort(days[0])} – {fmtShort(days[days.length - 1])}
                 </div>
                 <button onClick={() => navWeek(1)} className="h-8 w-8 inline-flex items-center justify-center bg-white hover:bg-slate-50 border border-slate-200 rounded">
                   <ChevronRight className="w-3.5 h-3.5" />
