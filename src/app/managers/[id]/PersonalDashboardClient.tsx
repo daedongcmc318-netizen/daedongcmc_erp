@@ -247,40 +247,7 @@ export default function PersonalDashboardClient({
 
   return (
     <div className="space-y-6">
-      {/* 담당 프로젝트 요약 */}
-      <section>
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
-            <Target className="w-4 h-4 text-brand-500" /> 담당 프로젝트 ({projects.length}건)
-          </h2>
-        </div>
-        {projects.length === 0 ? (
-          <div className="bg-white border border-slate-200 rounded-xl p-6 text-center text-xs text-slate-400">
-            올해 담당 프로젝트가 없습니다
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
-            {projects.slice(0, 12).map((p) => (
-              <div key={p.id} className="bg-white border border-slate-200 rounded-lg px-3 py-2 hover:border-brand-300 transition">
-                <div className="flex items-center gap-1.5 text-[11px]">
-                  {p.displayCode && (
-                    <span className="font-mono text-[10px] text-slate-400">{p.displayCode}</span>
-                  )}
-                  <span className="font-medium text-slate-800 truncate">{p.title}</span>
-                </div>
-                <div className="flex items-center gap-1 mt-0.5 text-[10px] text-slate-500">
-                  <span>{p.bizCategory}</span>
-                  <span>·</span>
-                  <span>{p.status}</span>
-                </div>
-              </div>
-            ))}
-            {projects.length > 12 && (
-              <div className="text-[11px] text-slate-400 self-center px-3">… 외 {projects.length - 12}건</div>
-            )}
-          </div>
-        )}
-      </section>
+      {/* 담당 프로젝트는 페이지 하단에 ProjectsClient 풀 테이블로 표시 (이 컴포넌트 외부) */}
 
       {!canSeeWeeklyPlanner ? (
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 text-center text-xs text-slate-500">

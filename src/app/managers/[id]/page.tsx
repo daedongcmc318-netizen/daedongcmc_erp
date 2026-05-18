@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { ArrowLeft } from "lucide-react";
 import { serializeProject } from "@/lib/serialize";
 import MyLeaveAttendanceWidget from "@/components/MyLeaveAttendanceWidget";
+import ProjectsClient from "@/components/ProjectsClient";
 import PersonalDashboardClient from "./PersonalDashboardClient";
 
 export const dynamic = "force-dynamic";
@@ -53,23 +54,41 @@ export default async function ManagerDashboardPage({
   const baseDate = searchParams.week ? new Date(searchParams.week) : new Date();
   const { start: weekStart, end: weekEnd } = getWeekRange(baseDate);
 
-  // 담당 프로젝트 (현재 연도)
+  // 담당 프로젝트 (현재 연도) — ProjectsClient 가 필요한 풀 데이터 로드
   const year = new Date().getFullYear();
-  const projects = await prisma.project.findMany({
-    where: { managerId: user.id, year },
-    select: {
-      id: true,
-      title: true,
-      displayCode: true,
-      bizCategory: true,
-      status: true,
-      midReportDate: true,
-      midReportYn: true,
-      finalReportDate: true,
-      finalReportYn: true,
-    },
-    orderBy: [{ status: "asc" }, { displayCode: "asc" }],
-  });
+  const [projects, companies, allUsers, allYears, customOptions] = await Promise.all([
+    prisma.project.findMany({
+      where: { managerId: user.id, year },
+      include: {
+        company: { include: { contacts: { take: 1, orderBy: { isPrimary: "desc" } } } },
+        agency: true,
+        manager: true,
+        taxInvoices: { orderBy: { createdAt: "asc" } },
+        deliverables: { orderBy: { seq: "asc" } },
+        _count: { select: { histories: true } },
+      },
+      orderBy: [{ source: "asc" }, { sortOrder: "asc" }],
+    }),
+    prisma.company.findMany({ orderBy: { name: "asc" } }),
+    prisma.user.findMany({
+      where: { status: "active" },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, pmCode: true, position: true, isInternal: true, isPM: true },
+    }),
+    prisma.project.findMany({
+      select: { year: true },
+      distinct: ["year"],
+      orderBy: { year: "desc" },
+    }),
+    prisma.dropdownOption.findMany({
+      orderBy: [{ category: "asc" }, { sortOrder: "asc" }],
+    }),
+  ]);
+  const yearsList = allYears.map((y) => y.year).filter((y) => y > 2000);
+  const projectsWithCount = projects.map((p: any) => ({
+    ...p,
+    historyCount: p._count?.histories ?? 0,
+  }));
 
   // 위클리 플래너 데이터 (본인/admin 만)
   let weeklyTasks: any[] = [];
@@ -135,12 +154,9 @@ export default async function ManagerDashboardPage({
               </p>
             </div>
           </div>
-          <Link
-            href={`/projects?year=${year}&manager=${user.id}`}
-            className="h-9 px-3 text-xs bg-white border border-slate-200 hover:border-brand-300 hover:text-brand-700 rounded inline-flex items-center"
-          >
-            담당 프로젝트 전체보기 ({projects.length}건) →
-          </Link>
+          <div className="text-[12px] text-slate-500 bg-slate-50 px-3 py-1.5 rounded">
+            {year}년 담당 프로젝트 <strong className="text-slate-800 tabular-nums">{projects.length}</strong>건
+          </div>
         </div>
       </div>
 
@@ -154,9 +170,29 @@ export default async function ManagerDashboardPage({
         canSeeWeeklyPlanner={canSeeWeeklyPlanner}
         weekStartISO={weekStart.toISOString()}
         initialTasks={weeklyTasks}
-        projects={projects.map(serializeProject) as any}
+        projects={[]}
         initialCategories={categories}
       />
+
+      {/* 담당 프로젝트 전체 — /projects?manager=user.id 와 동일한 풀 테이블을 인라인으로 표시 */}
+      <div className="mt-6">
+        <ProjectsClient
+          initialProjects={projectsWithCount.map(serializeProject) as any}
+          companies={companies as any}
+          users={allUsers as any}
+          currentYear={year}
+          years={yearsList}
+          currentManagerId={user.id}
+          selectedManager={{
+            id: user.id,
+            name: user.name,
+            dept: user.dept,
+            position: user.position,
+            pmCode: user.pmCode,
+          } as any}
+          customOptions={customOptions as any}
+        />
+      </div>
     </div>
   );
 }
