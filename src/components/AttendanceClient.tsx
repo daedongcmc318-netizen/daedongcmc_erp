@@ -1,7 +1,22 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Clock, LogIn, LogOut, AlertTriangle, Calendar, Pencil, Trash2, X, Check, Loader2 } from "lucide-react";
+import {
+  Clock,
+  LogIn,
+  LogOut,
+  AlertTriangle,
+  Calendar,
+  Pencil,
+  Trash2,
+  X,
+  Check,
+  Loader2,
+  MapPin,
+  Building2,
+  Star,
+  Navigation,
+} from "lucide-react";
 import clsx from "clsx";
 
 type Attendance = {
@@ -14,6 +29,27 @@ type Attendance = {
   checkOutIp: string | null;
   notes: string | null;
 };
+
+type Office = {
+  id: string;
+  name: string;
+  address?: string;
+  lat: number;
+  lng: number;
+  radiusM: number;
+  isPrimary?: boolean;
+};
+
+function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 function fmtTime(d: string | null): string {
   if (!d) return "—";
@@ -51,10 +87,12 @@ export default function AttendanceClient({
   me,
   today: initialToday,
   records: initialRecords,
+  offices,
 }: {
   me: { id: string; name: string; dept: string; position: string; isInternal: boolean; role: string };
   today: Attendance | null;
   records: Attendance[];
+  offices: Office[];
 }) {
   const router = useRouter();
   const [today, setToday] = useState<Attendance | null>(initialToday);
@@ -62,6 +100,63 @@ export default function AttendanceClient({
   const [now, setNow] = useState(new Date());
   const [editing, setEditing] = useState<Attendance | null>(null);
   const isAdmin = me.role === "admin";
+
+  // GPS 추적
+  const [pos, setPos] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
+  const [geoError, setGeoError] = useState<string | null>(null);
+  const [geoLoading, setGeoLoading] = useState(false);
+  const [selectedBranchId, setSelectedBranchId] = useState<string>(
+    offices.find((o) => o.isPrimary)?.id ?? offices[0]?.id ?? ""
+  );
+  const [autoPick, setAutoPick] = useState(true);
+
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setGeoError("이 브라우저는 위치 서비스를 지원하지 않습니다");
+      return;
+    }
+    setGeoLoading(true);
+    const id = navigator.geolocation.watchPosition(
+      (p) => {
+        setPos({ lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy });
+        setGeoError(null);
+        setGeoLoading(false);
+      },
+      (err) => {
+        setGeoError(err.message ?? "위치 가져오기 실패");
+        setGeoLoading(false);
+      },
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
+    );
+    return () => navigator.geolocation.clearWatch(id);
+  }, []);
+
+  // 각 지사 거리
+  const distances = useMemo(() => {
+    if (!pos) return new Map<string, number>();
+    const m = new Map<string, number>();
+    for (const o of offices) m.set(o.id, haversineMeters(pos.lat, pos.lng, o.lat, o.lng));
+    return m;
+  }, [pos, offices]);
+
+  // 자동 선택: GPS 잡히면 가장 가까운 지사로
+  useEffect(() => {
+    if (!autoPick || !pos || offices.length === 0) return;
+    let bestId = offices[0].id;
+    let bestDist = Infinity;
+    for (const o of offices) {
+      const d = haversineMeters(pos.lat, pos.lng, o.lat, o.lng);
+      if (d < bestDist) {
+        bestDist = d;
+        bestId = o.id;
+      }
+    }
+    setSelectedBranchId(bestId);
+  }, [pos, offices, autoPick]);
+
+  const selected = offices.find((o) => o.id === selectedBranchId) ?? null;
+  const selectedDistance = selected && pos ? distances.get(selected.id) ?? null : null;
+  const inRange = selected && selectedDistance != null ? selectedDistance <= selected.radiusM : false;
 
   async function deleteAttendance(id: string) {
     if (!confirm("이 근태 기록을 삭제하시겠습니까? 되돌릴 수 없습니다.")) return;
@@ -119,10 +214,24 @@ export default function AttendanceClient({
   }
 
   async function checkAction(action: "check_in" | "check_out") {
+    if (!pos) {
+      alert("위치 정보를 가져올 수 없습니다. GPS/위치 권한을 허용해주세요.");
+      return;
+    }
+    if (!selected) {
+      alert("출퇴근할 지사를 선택해주세요.");
+      return;
+    }
     const res = await fetch("/api/attendance", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action }),
+      body: JSON.stringify({
+        action,
+        lat: pos.lat,
+        lng: pos.lng,
+        accuracy: pos.accuracy,
+        branchId: selected.id,
+      }),
     });
     if (!res.ok) {
       const j = await res.json().catch(() => ({}));
@@ -175,6 +284,104 @@ export default function AttendanceClient({
         </div>
       </div>
 
+      {/* 출퇴근 지사 선택 + 위치 상태 */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 mb-3 shadow-sm">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[12px] text-slate-700 font-medium flex items-center gap-1.5">
+            <Building2 className="w-3.5 h-3.5 text-brand-500" /> 출퇴근 지사 선택
+          </span>
+          {!autoPick && pos && (
+            <button
+              onClick={() => setAutoPick(true)}
+              className="text-[11px] text-brand-600 hover:underline inline-flex items-center gap-1"
+            >
+              <Navigation className="w-3 h-3" /> 현재 위치로 자동 선택
+            </button>
+          )}
+        </div>
+        {offices.length === 0 ? (
+          <div className="text-center py-4 text-xs text-amber-700 bg-amber-50 rounded">
+            등록된 지사가 없습니다. 시스템 설정에서 추가해 주세요.
+          </div>
+        ) : (
+          <div
+            className={clsx(
+              "grid gap-2",
+              offices.length === 1 ? "grid-cols-1" : offices.length === 2 ? "grid-cols-2" : "grid-cols-3"
+            )}
+          >
+            {offices.map((o) => {
+              const d = distances.get(o.id);
+              const within = d != null && d <= o.radiusM;
+              const active = o.id === selectedBranchId;
+              return (
+                <button
+                  key={o.id}
+                  onClick={() => {
+                    setSelectedBranchId(o.id);
+                    setAutoPick(false);
+                  }}
+                  className={clsx(
+                    "p-2.5 rounded-lg border text-left transition",
+                    active
+                      ? within
+                        ? "bg-emerald-50 border-emerald-400 ring-2 ring-emerald-200"
+                        : "bg-amber-50 border-amber-400 ring-2 ring-amber-200"
+                      : "bg-white border-slate-200 hover:border-slate-300"
+                  )}
+                >
+                  <div className="flex items-center gap-1 mb-0.5">
+                    {o.isPrimary && (
+                      <Star className="w-3 h-3 text-amber-500 fill-amber-400 shrink-0" />
+                    )}
+                    <span className="text-[13px] font-semibold text-slate-800 truncate">
+                      {o.name}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <MapPin
+                      className={clsx(
+                        "w-3 h-3 shrink-0",
+                        within ? "text-emerald-600" : d == null ? "text-slate-300" : "text-amber-600"
+                      )}
+                    />
+                    <span
+                      className={clsx(
+                        "text-[11px] font-mono tabular-nums",
+                        d == null
+                          ? "text-slate-400"
+                          : within
+                            ? "text-emerald-700 font-semibold"
+                            : "text-amber-700"
+                      )}
+                    >
+                      {d == null ? "--m" : d < 1000 ? `${Math.round(d)}m` : `${(d / 1000).toFixed(1)}km`}
+                      <span className="text-[10px] text-slate-400 ml-1">/ 허용 {o.radiusM}m</span>
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {geoLoading && (
+          <div className="mt-2 flex items-center gap-1.5 text-[11px] text-slate-500">
+            <Loader2 className="w-3 h-3 animate-spin" /> GPS 위치 확인 중...
+          </div>
+        )}
+        {geoError && (
+          <div className="mt-2 flex items-center gap-1.5 text-[11px] text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1">
+            <AlertTriangle className="w-3 h-3 shrink-0" />
+            <span>{geoError}</span>
+          </div>
+        )}
+        {pos && (
+          <div className="mt-2 text-[9.5px] text-slate-400 font-mono">
+            내 위치: {pos.lat.toFixed(5)}, {pos.lng.toFixed(5)} (±{Math.round(pos.accuracy)}m)
+          </div>
+        )}
+      </div>
+
       {/* 오늘 출퇴근 카드 */}
       <div className="bg-gradient-to-br from-brand-50 to-blue-50 border border-brand-100 rounded-2xl p-6 mb-5 shadow-sm">
         <div className="flex items-center justify-between mb-4">
@@ -183,16 +390,37 @@ export default function AttendanceClient({
             <div className="text-4xl font-bold tabular-nums text-slate-800">
               {now.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}
             </div>
+            {selected && (
+              <div className="text-[11px] text-slate-500 mt-1.5 flex items-center gap-1">
+                <MapPin className={clsx("w-3 h-3", inRange ? "text-emerald-600" : "text-amber-600")} />
+                <span className="font-medium">{selected.name}</span>
+                <span
+                  className={clsx(
+                    "font-mono tabular-nums",
+                    inRange ? "text-emerald-700" : "text-amber-700"
+                  )}
+                >
+                  ({selectedDistance != null ? `${Math.round(selectedDistance)}m` : "--m"})
+                </span>
+                {inRange ? (
+                  <span className="text-emerald-700 font-semibold ml-1">✓ 반경 안</span>
+                ) : (
+                  <span className="text-amber-700 ml-1">⚠ 반경 밖 — 출퇴근 불가</span>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex gap-2">
             <button
               onClick={() => checkAction("check_in")}
-              disabled={!!today?.checkIn}
+              disabled={!!today?.checkIn || !inRange || !pos}
               className={clsx(
                 "h-14 px-6 text-base font-semibold rounded-xl shadow flex items-center gap-2 transition",
                 today?.checkIn
                   ? "bg-slate-100 text-slate-400 cursor-not-allowed"
-                  : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-200"
+                  : inRange && pos
+                    ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-200"
+                    : "bg-slate-100 text-slate-400 cursor-not-allowed"
               )}
             >
               <LogIn className="w-5 h-5" />
@@ -200,12 +428,14 @@ export default function AttendanceClient({
             </button>
             <button
               onClick={() => checkAction("check_out")}
-              disabled={!today?.checkIn || !!today?.checkOut}
+              disabled={!today?.checkIn || !!today?.checkOut || !inRange || !pos}
               className={clsx(
                 "h-14 px-6 text-base font-semibold rounded-xl shadow flex items-center gap-2 transition",
                 !today?.checkIn || today?.checkOut
                   ? "bg-slate-100 text-slate-400 cursor-not-allowed"
-                  : "bg-rose-500 hover:bg-rose-600 text-white shadow-rose-200"
+                  : inRange && pos
+                    ? "bg-rose-500 hover:bg-rose-600 text-white shadow-rose-200"
+                    : "bg-slate-100 text-slate-400 cursor-not-allowed"
               )}
             >
               <LogOut className="w-5 h-5" />

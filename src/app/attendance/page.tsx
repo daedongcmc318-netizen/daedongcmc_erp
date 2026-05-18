@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { getOfficeLocations } from "@/lib/geo";
 import AttendanceClient from "@/components/AttendanceClient";
 
 export const dynamic = "force-dynamic";
@@ -45,11 +46,14 @@ export default async function AttendancePage() {
     return v;
   };
 
+  const offices = await getOfficeLocations();
+
   return (
     <AttendanceClient
       me={{ ...myUser, isInternal: effectiveInternal, role: me.role }}
       today={today ? serialize(today) : null}
       records={serialize(records)}
+      offices={offices}
     />
   );
 }
