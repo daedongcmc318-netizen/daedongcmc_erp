@@ -283,28 +283,35 @@ export default async function DashboardPage() {
 
       {/* 매출 하이라이트 + 사무실 근무현황 (2단 레이아웃) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
-        {/* 왼쪽: 매출 하이라이트 */}
-        <div className="rounded-2xl shadow-card relative overflow-hidden text-white p-5 bg-gradient-to-br from-brand-600 via-brand-700 to-indigo-800">
+        {/* 왼쪽: 매출 하이라이트 — flex 컬럼으로 콘텐츠가 카드 전체 높이를 활용 */}
+        <div className="rounded-2xl shadow-card relative overflow-hidden text-white p-6 bg-gradient-to-br from-brand-600 via-brand-700 to-indigo-800 min-h-[260px] flex flex-col">
           <div className="absolute -right-16 -top-16 w-56 h-56 rounded-full bg-white/10 blur-3xl pointer-events-none" />
           <div className="absolute -right-4 -bottom-16 w-48 h-48 rounded-full bg-white/5 pointer-events-none" />
-          <div className="relative">
-            <div className="flex items-center gap-2 mb-2">
+          <div className="relative flex flex-col h-full">
+            {/* 헤더: 타이틀 */}
+            <div className="flex items-center gap-2 mb-3">
               <Target className="w-4 h-4 text-white/80" />
-              <span className="text-[11px] uppercase tracking-wider font-semibold text-white/80">
+              <span className="text-[13px] uppercase tracking-wider font-semibold text-white/85">
                 {data.year}년 최종확정매출
               </span>
             </div>
-            <div className="flex items-baseline gap-2 mb-1">
-              <span className="text-3xl font-bold tabular-nums tracking-tight">
+
+            {/* 큰 금액 */}
+            <div className="flex items-baseline gap-2 mb-2">
+              <span className="text-4xl font-bold tabular-nums tracking-tight">
                 {formatWon(data.finalConfirmedRevenue)}
               </span>
-              <span className="text-xs text-white/70">/ {formatWon(REVENUE_TARGET)}</span>
+              <span className="text-sm text-white/70">/ {formatWon(REVENUE_TARGET)}</span>
             </div>
-            <div className="text-[11px] text-white/80 mb-2">
+            <div className="text-[13px] text-white/85 mb-3">
               목표 대비 <span className="font-semibold text-white">{targetPct.toFixed(1)}%</span> · 잔여{" "}
-              {formatWonShort(Math.max(0, REVENUE_TARGET - data.finalConfirmedRevenue))}
+              <span className="font-semibold text-white">
+                {formatWonShort(Math.max(0, REVENUE_TARGET - data.finalConfirmedRevenue))}
+              </span>
             </div>
-            <div className="h-2 bg-white/15 rounded-full overflow-hidden relative">
+
+            {/* 진행 막대 */}
+            <div className="h-2.5 bg-white/15 rounded-full overflow-hidden relative">
               <div
                 className="h-full bg-gradient-to-r from-amber-300 to-amber-100"
                 style={{ width: `${targetPct}%` }}
@@ -315,30 +322,37 @@ export default async function DashboardPage() {
                 title={`세금계산서 발행: ${invoicePct.toFixed(1)}%`}
               />
             </div>
-            <div className="mt-1.5 flex items-center gap-3 text-[10px] text-white/70 mb-3">
-              <span className="inline-flex items-center gap-1">
-                <span className="w-2.5 h-1 rounded-sm bg-gradient-to-r from-amber-300 to-amber-100" /> 확정매출
+            <div className="mt-2 flex items-center gap-4 text-[11px] text-white/75 mb-4">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-3 h-1.5 rounded-sm bg-gradient-to-r from-amber-300 to-amber-100" /> 확정매출
               </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="w-0.5 h-2 bg-white/70" /> 발행시점
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-0.5 h-3 bg-white/70" /> 발행시점
               </span>
             </div>
 
-            {/* 발굴 vs 육성 breakdown */}
-            <div className="grid grid-cols-2 gap-2 pt-3 border-t border-white/15">
-              <div className="rounded-lg bg-white/10 backdrop-blur-sm px-3 py-2">
-                <div className="text-[9.5px] text-white/70 uppercase tracking-wider font-semibold">발굴 확정</div>
-                <div className="mt-0.5 text-base font-bold tabular-nums">
+            {/* spacer — 남은 공간을 위로 밀어올림 */}
+            <div className="flex-1" />
+
+            {/* 발굴 vs 육성 breakdown — 카드 하단에 고정 */}
+            <div className="grid grid-cols-2 gap-3 pt-4 border-t border-white/15">
+              <div className="rounded-lg bg-white/10 backdrop-blur-sm px-4 py-3">
+                <div className="text-[11px] text-white/75 uppercase tracking-wider font-semibold mb-1">
+                  발굴 확정
+                </div>
+                <div className="text-2xl font-bold tabular-nums leading-tight">
                   {formatWonShort(data.discoveryConfirmedRevenue)}
                 </div>
-                <div className="text-[9px] text-white/60">{data.discoveryCount}건</div>
+                <div className="text-[11px] text-white/70 mt-1 tabular-nums">{data.discoveryCount}건</div>
               </div>
-              <div className="rounded-lg bg-white/10 backdrop-blur-sm px-3 py-2">
-                <div className="text-[9.5px] text-white/70 uppercase tracking-wider font-semibold">육성 매출</div>
-                <div className="mt-0.5 text-base font-bold tabular-nums">
+              <div className="rounded-lg bg-white/10 backdrop-blur-sm px-4 py-3">
+                <div className="text-[11px] text-white/75 uppercase tracking-wider font-semibold mb-1">
+                  육성 매출
+                </div>
+                <div className="text-2xl font-bold tabular-nums leading-tight">
                   {formatWonShort(data.nurtureTotalRevenue)}
                 </div>
-                <div className="text-[9px] text-white/60">{data.nurtureCount}건</div>
+                <div className="text-[11px] text-white/70 mt-1 tabular-nums">{data.nurtureCount}건</div>
               </div>
             </div>
           </div>
