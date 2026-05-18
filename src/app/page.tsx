@@ -88,9 +88,21 @@ async function getDashboardData() {
   ] = await Promise.all([
     // 선금(isAdvance=true) 분할 건은 별도 카운트에서 제외 — 실제 프로젝트는 잔금 1건
     prisma.project.count({ where: { year, isAdvance: false } }),
+    // 진행현황 파이프라인: 육성 + 선금 제외
+    //   입금완료(payment_done) 만 추가 필터 — 2025년 수행 건은 제외, 2026년 수행건만 집계
+    //   ('endDate < 2026-01-01' 인 payment_done 은 제외. endDate 미지정 OR 2026 이후는 포함)
     prisma.project.groupBy({
       by: ["status"],
-      where: { year, source: "nurture", isAdvance: false },
+      where: {
+        year,
+        source: "nurture",
+        isAdvance: false,
+        OR: [
+          { status: { not: "payment_done" } },
+          { endDate: { gte: yearStart } },
+          { endDate: null },
+        ],
+      },
       _count: true,
     }),
     prisma.project.groupBy({ by: ["bizCategory"], where: { year, isAdvance: false }, _count: true }),
