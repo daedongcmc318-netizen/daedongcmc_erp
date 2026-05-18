@@ -1,3 +1,4 @@
+// 육성(nurture) 프로젝트 진행현황
 export const PROJECT_STATUS = [
   { value: "request_received", label: "서비스요청수신", color: "bg-slate-100 text-slate-700" },
   { value: "contract_pending", label: "수행계약대기", color: "bg-amber-100 text-amber-800" },
@@ -9,6 +10,23 @@ export const PROJECT_STATUS = [
   { value: "settlement_done", label: "정산완료", color: "bg-emerald-100 text-emerald-700" },
   { value: "payment_done", label: "입금완료", color: "bg-green-100 text-green-800" },
   { value: "scheduled", label: "A예정", color: "bg-zinc-100 text-zinc-600" },
+] as const;
+
+// 발굴(discovery) 프로젝트 진행현황 — 노션 엑셀 기준
+// value 는 한국어 그대로 (노션 import 시 그대로 들어오므로). 색상은 단계 의미별 매핑.
+export const DISCOVERY_STATUS = [
+  { value: "문의", label: "문의", color: "bg-slate-100 text-slate-600" },
+  { value: "견적문의", label: "견적문의", color: "bg-slate-100 text-slate-700" },
+  { value: "미팅요청", label: "미팅요청", color: "bg-cyan-100 text-cyan-700" },
+  { value: "미팅진행", label: "미팅진행", color: "bg-cyan-100 text-cyan-800" },
+  { value: "검토중", label: "검토중", color: "bg-amber-100 text-amber-700" },
+  { value: "사업신청", label: "사업신청", color: "bg-violet-100 text-violet-700" },
+  { value: "접수예정", label: "접수예정", color: "bg-blue-100 text-blue-700" },
+  { value: "접수완료", label: "접수완료", color: "bg-indigo-100 text-indigo-700" },
+  { value: "선정", label: "선정", color: "bg-emerald-100 text-emerald-700" },
+  { value: "탈락", label: "탈락", color: "bg-rose-100 text-rose-700" },
+  { value: "거절", label: "거절", color: "bg-rose-200 text-rose-800" },
+  { value: "미진행", label: "미진행", color: "bg-slate-200 text-slate-500" },
 ] as const;
 
 export const BIZ_CATEGORY = [
@@ -45,7 +63,12 @@ export const REQUEST_STATUS = [
 ] as const;
 
 export function getStatusMeta(value: string) {
-  return PROJECT_STATUS.find((s) => s.value === value) ?? { value, label: value, color: "bg-slate-100 text-slate-700" };
+  // 육성(nurture) 우선 매칭 → 발굴(discovery) → fallback
+  return (
+    PROJECT_STATUS.find((s) => s.value === value) ??
+    DISCOVERY_STATUS.find((s) => s.value === value) ??
+    { value, label: value, color: "bg-slate-100 text-slate-700" }
+  );
 }
 export function getBizMeta(value: string) {
   return BIZ_CATEGORY.find((s) => s.value === value) ?? { value, label: value, color: "bg-slate-50 text-slate-700 ring-slate-200" };

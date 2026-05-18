@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, useTransition, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   PROJECT_STATUS,
+  DISCOVERY_STATUS,
   BIZ_CATEGORY,
   SERVICE_TYPE,
   NURTURE_TYPE,
@@ -789,7 +790,12 @@ export default function ProjectsClient({
           />
         </div>
         <FilterSelect value={filterBiz} onChange={setFilterBiz} label="사업영역" options={BIZ_CATEGORY.map((b) => ({ value: b.value, label: b.label }))} />
-        <FilterSelect value={filterStatus} onChange={setFilterStatus} label="진행현황" options={PROJECT_STATUS.map((b) => ({ value: b.value, label: b.label }))} />
+        <FilterSelect
+          value={filterStatus}
+          onChange={setFilterStatus}
+          label="진행현황"
+          options={(tab === "discovery" ? DISCOVERY_STATUS : PROJECT_STATUS).map((b) => ({ value: b.value, label: b.label }))}
+        />
         <FilterSelect value={filterPM} onChange={setFilterPM} label="PM" options={pmCodes.map((c) => ({ value: c, label: c }))} />
         <FilterSelect value={filterManager} onChange={setFilterManager} label="담당자" options={managerOptions} />
         <FilterSelect value={filterDetail} onChange={setFilterDetail} label="상세서비스" options={detailOptions.map((d) => ({ value: d, label: d }))} />
@@ -1283,8 +1289,12 @@ function renderCell(
       );
     }
     case "status": {
-      const hardcodedStatus = PROJECT_STATUS.map((s, i) => ({ ...s, sortOrder: i + 1 }));
-      const customStatus = customOptionsFor("projectStatus").map((o) => ({
+      // 발굴/육성 별로 다른 status 옵션 노출
+      const isDiscovery = p.source === "discovery";
+      const baseStatus = isDiscovery ? DISCOVERY_STATUS : PROJECT_STATUS;
+      const customCategory = isDiscovery ? "discoveryStatus" : "projectStatus";
+      const hardcodedStatus = baseStatus.map((s, i) => ({ ...s, sortOrder: i + 1 }));
+      const customStatus = customOptionsFor(customCategory).map((o) => ({
         id: o.id,
         value: o.value,
         label: o.label,
@@ -1297,7 +1307,7 @@ function renderCell(
           value={p.status}
           options={mergedStatus}
           onChange={(v) => onPatch({ status: v })}
-          addCategory="projectStatus"
+          addCategory={customCategory}
           onOptionAdded={onOptionAdded}
           onOptionReorder={onOptionReorder}
           onOptionRemove={onOptionRemove}
