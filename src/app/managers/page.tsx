@@ -14,10 +14,10 @@ export default async function ManagersPage({
   const currentYear = new Date().getFullYear();
   const year = searchParams.year ? Number(searchParams.year) : currentYear;
 
-  // 연도 + 매니저별 집계
+  // 연도 + 매니저별 집계 — 선금(isAdvance=true) 분할 건은 제외 (실제 프로젝트 1건 = 잔금)
   const grouped = await prisma.project.groupBy({
     by: ["managerId"],
-    where: { year, managerId: { not: null } },
+    where: { year, managerId: { not: null }, isAdvance: false },
     _count: true,
   });
 
@@ -37,18 +37,16 @@ export default async function ManagersPage({
   });
   const mMap = new Map(allCandidates.map((m) => [m.id, m]));
 
-  // 추가 정보 (진행중 / 완료 / 사업영역별)
-  //   진행중 = 완료보고(finalReportYn) 미체크
-  //   완료   = 완료보고(finalReportYn) 체크됨
+  // 추가 정보 (진행중 / 완료 / 사업영역별) — 선금 제외
   const [inProgressGroups, doneGroups] = await Promise.all([
     prisma.project.groupBy({
       by: ["managerId"],
-      where: { year, managerId: { not: null }, finalReportYn: false },
+      where: { year, managerId: { not: null }, finalReportYn: false, isAdvance: false },
       _count: true,
     }),
     prisma.project.groupBy({
       by: ["managerId"],
-      where: { year, managerId: { not: null }, finalReportYn: true },
+      where: { year, managerId: { not: null }, finalReportYn: true, isAdvance: false },
       _count: true,
     }),
   ]);
@@ -57,7 +55,7 @@ export default async function ManagersPage({
 
   const bizGroups = await prisma.project.groupBy({
     by: ["managerId", "bizCategory"],
-    where: { year, managerId: { not: null } },
+    where: { year, managerId: { not: null }, isAdvance: false },
     _count: true,
   });
   const bizMap = new Map<string, Map<string, number>>();

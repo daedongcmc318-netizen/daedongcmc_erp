@@ -86,19 +86,23 @@ async function getDashboardData() {
     dueThisMonth,
     inProgressTotal,
   ] = await Promise.all([
-    prisma.project.count({ where: { year } }),
-    // 진행현황 파이프라인은 '육성'만 집계 (발굴은 별도 카운트로 앞에 붙임)
-    prisma.project.groupBy({ by: ["status"], where: { year, source: "nurture" }, _count: true }),
-    prisma.project.groupBy({ by: ["bizCategory"], where: { year }, _count: true }),
+    // 선금(isAdvance=true) 분할 건은 별도 카운트에서 제외 — 실제 프로젝트는 잔금 1건
+    prisma.project.count({ where: { year, isAdvance: false } }),
+    prisma.project.groupBy({
+      by: ["status"],
+      where: { year, source: "nurture", isAdvance: false },
+      _count: true,
+    }),
+    prisma.project.groupBy({ by: ["bizCategory"], where: { year, isAdvance: false }, _count: true }),
     // 발굴 확정 매출
     prisma.project.aggregate({
-      where: { source: "discovery", confirmedYn: true, ...yearScopedWhere },
+      where: { source: "discovery", confirmedYn: true, isAdvance: false, ...yearScopedWhere },
       _sum: { confirmedRevenue: true },
       _count: true,
     }),
     // 육성 매출현황 (전체)
     prisma.project.aggregate({
-      where: { source: "nurture", ...yearScopedWhere },
+      where: { source: "nurture", isAdvance: false, ...yearScopedWhere },
       _sum: { confirmedRevenue: true },
       _count: true,
     }),
@@ -110,41 +114,41 @@ async function getDashboardData() {
       },
       select: { amount: true, issueDate: true, paymentDoneYn: true },
     }),
-    // 담당자별 카운트 (진행중 vs 완료) — finalReportYn 체크 여부로 분류
+    // 담당자별 카운트 (진행중 vs 완료) — finalReportYn 체크 여부 + 선금 분할 건 제외
     prisma.project.groupBy({
       by: ["managerId", "finalReportYn"],
-      where: { year, managerId: { not: null } },
+      where: { year, managerId: { not: null }, isAdvance: false },
       _count: true,
     }),
-    // 월별 마감현황: 육성 프로젝트 중 완료보고 미완료 + 의미있는 서비스 타입만
-    //   제외: 인증(certification), 임대(rental), 비용정산(cost_settlement), 서비스없음(null)
+    // 월별 마감현황 — 선금 제외
     prisma.project.findMany({
       where: {
         year,
         source: "nurture",
         finalReportYn: false,
+        isAdvance: false,
         serviceType: { notIn: ["certification", "rental", "cost_settlement"], not: null },
       },
       select: { finalReportDate: true, serviceType: true, finalReportYn: true, title: true, displayCode: true },
     }),
-    // 이번달 마감 예정 = 종료일자가 이번달에 속한 건 (이미 지난 일자 포함, 완료보고 미완료만)
+    // 이번달 마감 예정 — 선금 제외
     prisma.project.count({
-      where: { year, endDate: { gte: monthStart, lte: monthEnd }, finalReportYn: false },
+      where: { year, endDate: { gte: monthStart, lte: monthEnd }, finalReportYn: false, isAdvance: false },
     }),
-    // 전체 진행중 = 완료보고(finalReportYn) 체크되기 전 모든 프로젝트
+    // 전체 진행중 — 선금 제외
     prisma.project.count({
-      where: { year, finalReportYn: false },
+      where: { year, finalReportYn: false, isAdvance: false },
     }),
   ]);
 
-  // 1주 이내 중간/완료 보고 마감 예정 (완료 포함 — D-day 옆에 '완료' 뱃지 표시)
+  // 1주 이내 중간/완료 보고 마감 예정 (완료 포함). 선금 분할 건 제외.
   const upcomingMid = await prisma.project.findMany({
-    where: { midReportDate: { gte: today, lte: weekLater } },
+    where: { midReportDate: { gte: today, lte: weekLater }, isAdvance: false },
     include: { manager: { select: { name: true, pmCode: true } } },
     orderBy: { midReportDate: "asc" },
   });
   const upcomingFinal = await prisma.project.findMany({
-    where: { finalReportDate: { gte: today, lte: weekLater } },
+    where: { finalReportDate: { gte: today, lte: weekLater }, isAdvance: false },
     include: { manager: { select: { name: true, pmCode: true } } },
     orderBy: { finalReportDate: "asc" },
   });
@@ -164,7 +168,7 @@ async function getDashboardData() {
   ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   const inProgressCompanies = await prisma.project.findMany({
-    where: { year, status: "in_progress", companyId: { not: null } },
+    where: { year, status: "in_progress", companyId: { not: null }, isAdvance: false },
     select: { companyId: true },
     distinct: ["companyId"],
   });
