@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { checkInRadius, getOfficeLocations } from "@/lib/geo";
+import { checkInRadius, getOfficeLocations, haversineMeters } from "@/lib/geo";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { action, notes, lat, lng, accuracy } = body;
+  const { action, notes, lat, lng, accuracy, branchId } = body;
   const today = dateOnly(new Date());
   const now = new Date();
   const ip = getIp(req);
@@ -38,7 +38,9 @@ export async function POST(req: NextRequest) {
     where: { userId_date: { userId: me.id, date: today } },
   });
 
-  // GPS 검증 — 출근/퇴근 시 lat/lng 필수 + 등록된 모든 지사 중 가장 가까운 곳 반경 안에 있어야 통과
+  // GPS 검증 — 출근/퇴근 시 lat/lng 필수
+  //   branchId 제공 시: 해당 지사 반경 안에 있어야 통과 (엄격)
+  //   branchId 없음: 등록된 모든 지사 중 어느 곳이라도 반경 안이면 통과 (관대 — legacy 호환)
   let distance: number | null = null;
   if (action === "check_in" || action === "check_out") {
     if (lat == null || lng == null) {
@@ -56,18 +58,39 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
-    const { ok, nearest, distance: dist } = await checkInRadius(Number(lat), Number(lng));
-    distance = dist;
-    if (!ok) {
-      return NextResponse.json(
-        {
-          error: `등록된 사무실 반경 밖입니다. 가장 가까운 지사: ${nearest?.name ?? "(미지정)"} · 거리 ${Math.round(dist ?? 0)}m (허용 반경 ${nearest?.radiusM ?? 0}m)`,
-          distance: dist,
-          nearestName: nearest?.name,
-          officeRadius: nearest?.radiusM,
-        },
-        { status: 403 }
-      );
+
+    if (branchId) {
+      const target = offices.find((o) => o.id === branchId);
+      if (!target) {
+        return NextResponse.json({ error: "선택한 지사를 찾을 수 없습니다." }, { status: 400 });
+      }
+      const dist = haversineMeters(Number(lat), Number(lng), target.lat, target.lng);
+      distance = dist;
+      if (dist > target.radiusM) {
+        return NextResponse.json(
+          {
+            error: `[${target.name}] 반경 밖입니다. 현재 ${Math.round(dist)}m (허용 반경 ${target.radiusM}m)`,
+            distance: dist,
+            branchName: target.name,
+            officeRadius: target.radiusM,
+          },
+          { status: 403 }
+        );
+      }
+    } else {
+      const { ok, nearest, distance: dist } = await checkInRadius(Number(lat), Number(lng));
+      distance = dist;
+      if (!ok) {
+        return NextResponse.json(
+          {
+            error: `등록된 사무실 반경 밖입니다. 가장 가까운 지사: ${nearest?.name ?? "(미지정)"} · 거리 ${Math.round(dist ?? 0)}m (허용 반경 ${nearest?.radiusM ?? 0}m)`,
+            distance: dist,
+            nearestName: nearest?.name,
+            officeRadius: nearest?.radiusM,
+          },
+          { status: 403 }
+        );
+      }
     }
   }
 

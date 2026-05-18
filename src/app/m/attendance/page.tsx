@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { getOfficeLocation } from "@/lib/geo";
+import { getOfficeLocations } from "@/lib/geo";
 import MobileAttendanceClient from "@/components/mobile/MobileAttendanceClient";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +30,7 @@ export default async function MobileAttendancePage() {
     orderBy: { date: "desc" },
   });
 
-  const office = await getOfficeLocation();
+  const offices = await getOfficeLocations();
 
   const serialize = (v: any): any => {
     if (v == null) return v;
@@ -49,7 +49,7 @@ export default async function MobileAttendancePage() {
       me={{ ...myUser, isInternal: myUser.isInternal || me.role === "admin", role: me.role }}
       today={today ? serialize(today) : null}
       recent={serialize(recent)}
-      office={office}
+      offices={offices}
     />
   );
 }

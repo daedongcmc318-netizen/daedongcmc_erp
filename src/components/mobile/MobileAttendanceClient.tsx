@@ -1,16 +1,15 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   MapPin,
   LogIn,
   LogOut,
-  Clock,
   AlertTriangle,
-  CheckCircle2,
   Loader2,
-  Navigation,
   Briefcase,
+  Building2,
+  Star,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -26,12 +25,14 @@ type Attendance = {
 };
 
 type Office = {
+  id: string;
   name: string;
   address?: string;
   lat: number;
   lng: number;
   radiusM: number;
-} | null;
+  isPrimary?: boolean;
+};
 
 function fmtTime(d: string | null): string {
   if (!d) return "--:--";
@@ -70,12 +71,12 @@ export default function MobileAttendanceClient({
   me,
   today: initialToday,
   recent: initialRecent,
-  office,
+  offices,
 }: {
   me: { id: string; name: string; dept: string; position: string; isInternal: boolean; role: string };
   today: Attendance | null;
   recent: Attendance[];
-  office: Office;
+  offices: Office[];
 }) {
   const router = useRouter();
   const [today, setToday] = useState<Attendance | null>(initialToday);
@@ -85,6 +86,9 @@ export default function MobileAttendanceClient({
   const [geoError, setGeoError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [selectedBranchId, setSelectedBranchId] = useState<string>(
+    offices.find((o) => o.isPrimary)?.id ?? offices[0]?.id ?? ""
+  );
 
   // 시계
   useEffect(() => {
@@ -114,14 +118,42 @@ export default function MobileAttendanceClient({
     return () => navigator.geolocation.clearWatch(id);
   }, []);
 
-  const distance =
-    pos && office ? haversineMeters(pos.lat, pos.lng, office.lat, office.lng) : null;
-  const inRange = office && distance != null ? distance <= office.radiusM : false;
-  const canCheck = me.role === "admin" || (pos != null && inRange);
+  // 각 지사 거리 (실시간)
+  const distances = useMemo(() => {
+    if (!pos) return new Map<string, number>();
+    const m = new Map<string, number>();
+    for (const o of offices) m.set(o.id, haversineMeters(pos.lat, pos.lng, o.lat, o.lng));
+    return m;
+  }, [pos, offices]);
+
+  // 자동 선택: GPS 잡히면 가장 가까운 지사로 자동 전환 (사용자 명시 변경 전까지)
+  const [autoPick, setAutoPick] = useState(true);
+  useEffect(() => {
+    if (!autoPick || !pos || offices.length === 0) return;
+    let bestId = offices[0].id;
+    let bestDist = Infinity;
+    for (const o of offices) {
+      const d = haversineMeters(pos.lat, pos.lng, o.lat, o.lng);
+      if (d < bestDist) {
+        bestDist = d;
+        bestId = o.id;
+      }
+    }
+    setSelectedBranchId(bestId);
+  }, [pos, offices, autoPick]);
+
+  const selected = offices.find((o) => o.id === selectedBranchId) ?? null;
+  const selectedDistance = selected && pos ? distances.get(selected.id) ?? null : null;
+  const inRange = selected && selectedDistance != null ? selectedDistance <= selected.radiusM : false;
+  const canCheck = pos != null && inRange;
 
   async function action(act: "check_in" | "check_out") {
-    if (!pos && me.role !== "admin") {
+    if (!pos) {
       alert("위치 정보를 가져올 수 없습니다. GPS를 허용해주세요.");
+      return;
+    }
+    if (!selected) {
+      alert("출퇴근할 지사를 선택해주세요.");
       return;
     }
     setBusy(true);
@@ -131,9 +163,10 @@ export default function MobileAttendanceClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: act,
-          lat: pos?.lat,
-          lng: pos?.lng,
-          accuracy: pos?.accuracy,
+          lat: pos.lat,
+          lng: pos.lng,
+          accuracy: pos.accuracy,
+          branchId: selected.id,
         }),
       });
       const j = await res.json();
@@ -192,7 +225,9 @@ export default function MobileAttendanceClient({
           <div>
             <div className="text-[11px] text-white/70">대동CMC 근태</div>
             <div className="text-lg font-bold">{me.name}</div>
-            <div className="text-[11px] text-white/80">{me.dept} · {me.position}</div>
+            <div className="text-[11px] text-white/80">
+              {me.dept} · {me.position}
+            </div>
           </div>
           <div className="text-right">
             <div className="text-[10px] text-white/70">{fmtDate(now)}</div>
@@ -203,14 +238,99 @@ export default function MobileAttendanceClient({
         </div>
       </div>
 
-      {/* 위치 상태 카드 */}
+      {/* 지사 선택 + 위치 상태 카드 */}
       <div className="px-4 -mt-4">
-        <div className={clsx(
-          "rounded-2xl shadow-sm border p-4 mb-4",
-          loading ? "bg-white border-slate-200" :
-          geoError ? "bg-rose-50 border-rose-200" :
-          inRange ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-200"
-        )}>
+        <div className="rounded-2xl shadow-sm border border-slate-200 bg-white p-3 mb-4">
+          {/* 지사 선택 탭 */}
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
+              <Building2 className="w-3 h-3" /> 출퇴근 지사 선택
+            </span>
+            {!autoPick && pos && (
+              <button
+                onClick={() => setAutoPick(true)}
+                className="text-[10px] text-brand-600 hover:underline"
+              >
+                현재 위치로 자동
+              </button>
+            )}
+          </div>
+          {offices.length === 0 ? (
+            <div className="text-center py-4 text-xs text-amber-700 bg-amber-50 rounded">
+              등록된 지사가 없습니다. 관리자에게 문의하세요.
+            </div>
+          ) : (
+            <div
+              className={clsx(
+                "grid gap-1.5",
+                offices.length === 1 ? "grid-cols-1" : offices.length === 2 ? "grid-cols-2" : "grid-cols-3"
+              )}
+            >
+              {offices.map((o) => {
+                const d = distances.get(o.id);
+                const within = d != null && d <= o.radiusM;
+                const active = o.id === selectedBranchId;
+                return (
+                  <button
+                    key={o.id}
+                    onClick={() => {
+                      setSelectedBranchId(o.id);
+                      setAutoPick(false);
+                    }}
+                    className={clsx(
+                      "p-2 rounded-lg border text-left transition",
+                      active
+                        ? within
+                          ? "bg-emerald-50 border-emerald-400 ring-2 ring-emerald-200"
+                          : "bg-amber-50 border-amber-400 ring-2 ring-amber-200"
+                        : "bg-white border-slate-200 hover:border-slate-300"
+                    )}
+                  >
+                    <div className="flex items-center gap-1 mb-0.5">
+                      {o.isPrimary && (
+                        <Star className="w-2.5 h-2.5 text-amber-500 fill-amber-400 shrink-0" />
+                      )}
+                      <span
+                        className={clsx(
+                          "text-[12px] font-semibold truncate",
+                          active ? "text-slate-800" : "text-slate-700"
+                        )}
+                      >
+                        {o.name}
+                      </span>
+                    </div>
+                    <div
+                      className={clsx(
+                        "text-[10px] font-mono tabular-nums",
+                        d == null
+                          ? "text-slate-300"
+                          : within
+                            ? "text-emerald-700 font-semibold"
+                            : "text-amber-700"
+                      )}
+                    >
+                      {d == null ? "--m" : d < 1000 ? `${Math.round(d)}m` : `${(d / 1000).toFixed(1)}km`}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* 선택된 지사 위치 상태 */}
+        <div
+          className={clsx(
+            "rounded-2xl shadow-sm border p-4 mb-4",
+            loading
+              ? "bg-white border-slate-200"
+              : geoError
+                ? "bg-rose-50 border-rose-200"
+                : inRange
+                  ? "bg-emerald-50 border-emerald-200"
+                  : "bg-amber-50 border-amber-200"
+          )}
+        >
           {loading ? (
             <div className="flex items-center gap-2 text-slate-600">
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -221,19 +341,26 @@ export default function MobileAttendanceClient({
               <AlertTriangle className="w-4 h-4" />
               <span className="text-sm">{geoError}</span>
             </div>
-          ) : office ? (
+          ) : selected ? (
             <>
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-1.5">
                   <MapPin className={clsx("w-4 h-4", inRange ? "text-emerald-600" : "text-amber-600")} />
-                  <span className="font-semibold text-[13px]">{office.name}</span>
+                  <span className="font-semibold text-[13px]">{selected.name}</span>
                 </div>
-                <span className={clsx("text-[11px] font-bold tabular-nums", inRange ? "text-emerald-700" : "text-amber-700")}>
-                  {distance != null ? `${Math.round(distance)}m` : "--m"}
+                <span
+                  className={clsx(
+                    "text-[11px] font-bold tabular-nums",
+                    inRange ? "text-emerald-700" : "text-amber-700"
+                  )}
+                >
+                  {selectedDistance != null ? `${Math.round(selectedDistance)}m` : "--m"}
                 </span>
               </div>
               <div className="text-[11px] text-slate-600 mb-1">
-                {inRange ? `✓ 사무실 반경 ${office.radiusM}m 안에 있습니다` : `허용 반경 ${office.radiusM}m — ${distance ? Math.round(distance - office.radiusM) : "--"}m 더 가까이 가야 합니다`}
+                {inRange
+                  ? `✓ ${selected.name} 반경 ${selected.radiusM}m 안에 있습니다`
+                  : `허용 반경 ${selected.radiusM}m — ${selectedDistance ? Math.round(selectedDistance - selected.radiusM) : "--"}m 더 가까이 가야 합니다`}
               </div>
               {pos && (
                 <div className="text-[9px] text-slate-400 font-mono">
@@ -242,7 +369,7 @@ export default function MobileAttendanceClient({
               )}
             </>
           ) : (
-            <div className="text-sm text-amber-700">사무실 위치 미설정 — 관리자에게 문의</div>
+            <div className="text-sm text-amber-700">지사를 선택하세요</div>
           )}
         </div>
 
@@ -250,7 +377,7 @@ export default function MobileAttendanceClient({
         <div className="grid grid-cols-2 gap-3 mb-4">
           <button
             onClick={() => action("check_in")}
-            disabled={busy || !!today?.checkIn || (!canCheck && me.role !== "admin")}
+            disabled={busy || !!today?.checkIn || !canCheck}
             className={clsx(
               "py-6 rounded-2xl font-bold text-base shadow-lg flex flex-col items-center gap-1.5 transition",
               today?.checkIn
@@ -265,7 +392,7 @@ export default function MobileAttendanceClient({
           </button>
           <button
             onClick={() => action("check_out")}
-            disabled={busy || !today?.checkIn || !!today?.checkOut || (!canCheck && me.role !== "admin")}
+            disabled={busy || !today?.checkIn || !!today?.checkOut || !canCheck}
             className={clsx(
               "py-6 rounded-2xl font-bold text-base shadow-lg flex flex-col items-center gap-1.5 transition",
               !today?.checkIn || today?.checkOut
