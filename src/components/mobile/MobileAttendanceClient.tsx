@@ -10,6 +10,8 @@ import {
   Briefcase,
   Building2,
   Star,
+  Users as UsersIcon,
+  RefreshCw,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -67,21 +69,44 @@ function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number)
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+type AdminData = {
+  allTodayAttendance: (Attendance & {
+    user: { id: string; name: string; dept: string; position: string };
+    checkInDistance?: number | null;
+  })[];
+  internalUsers: { id: string; name: string; dept: string; position: string }[];
+};
+
 export default function MobileAttendanceClient({
   me,
   today: initialToday,
   recent: initialRecent,
   offices,
+  adminData,
 }: {
   me: { id: string; name: string; dept: string; position: string; isInternal: boolean; role: string };
   today: Attendance | null;
   recent: Attendance[];
   offices: Office[];
+  adminData?: AdminData | null;
 }) {
   const router = useRouter();
+  const isAdmin = me.role === "admin";
   const [today, setToday] = useState<Attendance | null>(initialToday);
   const [recent, setRecent] = useState<Attendance[]>(initialRecent);
   const [now, setNow] = useState(new Date());
+
+  // 워크/관리자 모드 (admin 전용)
+  const [viewMode, setViewMode] = useState<"worker" | "admin">(() => {
+    if (typeof window === "undefined") return "worker";
+    const saved = window.localStorage.getItem("attendance_view_mode");
+    if (saved === "worker" || saved === "admin") return saved;
+    return me.isInternal ? "worker" : "admin";
+  });
+  function changeViewMode(m: "worker" | "admin") {
+    setViewMode(m);
+    if (typeof window !== "undefined") window.localStorage.setItem("attendance_view_mode", m);
+  }
   const [pos, setPos] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
   const [geoError, setGeoError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -221,12 +246,45 @@ export default function MobileAttendanceClient({
     <div className="min-h-screen flex flex-col">
       {/* 상단 헤더 */}
       <div className="bg-gradient-to-br from-brand-600 to-indigo-700 text-white p-5 pb-7">
+        {/* 워크/관리자 토글 (admin 전용) — 헤더 맨 위 */}
+        {isAdmin && adminData && (
+          <div className="flex justify-center mb-3">
+            <div className="inline-flex rounded-full bg-white/15 backdrop-blur-sm p-0.5">
+              <button
+                onClick={() => changeViewMode("worker")}
+                className={clsx(
+                  "h-8 px-5 text-[12px] font-semibold rounded-full transition flex items-center gap-1.5",
+                  viewMode === "worker"
+                    ? "bg-white text-brand-700 shadow"
+                    : "text-white/80 hover:text-white"
+                )}
+              >
+                <Briefcase className="w-3 h-3" /> 워크
+              </button>
+              <button
+                onClick={() => changeViewMode("admin")}
+                className={clsx(
+                  "h-8 px-5 text-[12px] font-semibold rounded-full transition flex items-center gap-1.5",
+                  viewMode === "admin"
+                    ? "bg-white text-brand-700 shadow"
+                    : "text-white/80 hover:text-white"
+                )}
+              >
+                <UsersIcon className="w-3 h-3" /> 관리자
+              </button>
+            </div>
+          </div>
+        )}
         <div className="flex items-center justify-between mb-2">
           <div>
-            <div className="text-[11px] text-white/70">대동CMC 근태</div>
-            <div className="text-lg font-bold">{me.name}</div>
+            <div className="text-[11px] text-white/70">
+              {viewMode === "admin" ? "대동CMC 근태 (관리자)" : "대동CMC 근태"}
+            </div>
+            <div className="text-lg font-bold">
+              {viewMode === "admin" ? "오늘 근무 현황" : me.name}
+            </div>
             <div className="text-[11px] text-white/80">
-              {me.dept} · {me.position}
+              {viewMode === "admin" ? "전체 내부직원 출퇴근 상황" : `${me.dept} · ${me.position}`}
             </div>
           </div>
           <div className="text-right">
@@ -237,6 +295,16 @@ export default function MobileAttendanceClient({
           </div>
         </div>
       </div>
+
+      {/* 관리자 모드 */}
+      {viewMode === "admin" && adminData && (
+        <div className="px-4 -mt-4">
+          <MobileAdminView data={adminData} onRefresh={() => router.refresh()} />
+        </div>
+      )}
+
+      {viewMode === "worker" && (
+      <>
 
       {/* 지사 선택 + 위치 상태 카드 */}
       <div className="px-4 -mt-4">
@@ -484,6 +552,231 @@ export default function MobileAttendanceClient({
           GPS 기반 출퇴근 체크
           <br />
           홈 화면에 추가하여 앱처럼 사용 가능
+        </div>
+      </div>
+      </>
+      )}
+    </div>
+  );
+}
+
+/* ─────────── 모바일 관리자 뷰 ─────────── */
+function MobileAdminView({
+  data,
+  onRefresh,
+}: {
+  data: AdminData;
+  onRefresh: () => void;
+}) {
+  const [refreshing, setRefreshing] = useState(false);
+  // 자동 새로고침 (30초)
+  useEffect(() => {
+    const t = setInterval(() => onRefresh(), 30000);
+    return () => clearInterval(t);
+  }, [onRefresh]);
+
+  const fmt = (d: string | null) => {
+    if (!d) return "--:--";
+    return new Date(d).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false });
+  };
+
+  const checkedInIds = new Set(data.allTodayAttendance.filter((a) => a.checkIn).map((a) => a.user.id));
+  const working = data.allTodayAttendance.filter((a) => a.checkIn && !a.checkOut);
+  const done = data.allTodayAttendance.filter((a) => a.checkIn && a.checkOut);
+  const noCheckin = data.internalUsers.filter((u) => !checkedInIds.has(u.id));
+
+  function handleRefresh() {
+    setRefreshing(true);
+    onRefresh();
+    setTimeout(() => setRefreshing(false), 700);
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* 통계 4박스 */}
+      <div className="grid grid-cols-2 gap-2">
+        <MobileStatBox label="전체" value={data.internalUsers.length} suffix="명" tone="slate" />
+        <MobileStatBox label="근무 중" value={working.length} suffix="명" tone="emerald" />
+        <MobileStatBox label="퇴근 완료" value={done.length} suffix="명" tone="violet" />
+        <MobileStatBox label="미체크" value={noCheckin.length} suffix="명" tone="rose" />
+      </div>
+
+      {/* 오늘 근무 */}
+      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+        <div className="px-3 py-2.5 border-b border-slate-200 flex items-center justify-between">
+          <span className="text-[13px] font-semibold flex items-center gap-1">
+            <UsersIcon className="w-3.5 h-3.5 text-brand-500" /> 오늘 근무
+            <span className="text-[10.5px] px-1.5 py-0.5 bg-brand-50 text-brand-700 rounded">
+              {data.allTodayAttendance.length}
+            </span>
+          </span>
+          <button
+            onClick={handleRefresh}
+            className="h-7 px-2 text-[10.5px] text-slate-600 hover:text-brand-600 hover:bg-brand-50 rounded inline-flex items-center gap-1"
+          >
+            <RefreshCw className={clsx("w-3 h-3", refreshing && "animate-spin")} />
+          </button>
+        </div>
+
+        <MobileSection title="근무 중인 직원" count={working.length} tone="emerald">
+          {working.length === 0 ? (
+            <div className="px-3 py-3 text-center text-[11px] text-slate-400">근무 중인 직원 없음</div>
+          ) : (
+            working.map((a) => (
+              <MobilePersonRow
+                key={a.id}
+                name={a.user.name}
+                dept={a.user.dept}
+                checkIn={fmt(a.checkIn)}
+                checkOut={fmt(a.checkOut)}
+                status="working"
+              />
+            ))
+          )}
+        </MobileSection>
+
+        <MobileSection title="퇴근한 직원" count={done.length} tone="violet">
+          {done.length === 0 ? (
+            <div className="px-3 py-3 text-center text-[11px] text-slate-400">아직 퇴근 기록 없음</div>
+          ) : (
+            done.map((a) => (
+              <MobilePersonRow
+                key={a.id}
+                name={a.user.name}
+                dept={a.user.dept}
+                checkIn={fmt(a.checkIn)}
+                checkOut={fmt(a.checkOut)}
+                status="done"
+              />
+            ))
+          )}
+        </MobileSection>
+
+        {noCheckin.length > 0 && (
+          <MobileSection title="아직 출근 안 함" count={noCheckin.length} tone="rose">
+            {noCheckin.map((u) => (
+              <div
+                key={u.id}
+                className="px-3 py-2 border-b border-slate-50 flex items-center justify-between"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-400 text-[10px] font-semibold flex items-center justify-center shrink-0">
+                    {u.name.slice(0, 1)}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[12px] font-semibold text-slate-700 truncate">{u.name}</div>
+                    <div className="text-[9.5px] text-slate-400 truncate">{u.dept}</div>
+                  </div>
+                </div>
+                <span className="text-[10.5px] text-rose-600 font-medium">미출근</span>
+              </div>
+            ))}
+          </MobileSection>
+        )}
+      </div>
+
+      <div className="text-center text-[9.5px] text-slate-400 pb-6">
+        30초마다 자동 새로고침
+      </div>
+    </div>
+  );
+}
+
+function MobileStatBox({
+  label,
+  value,
+  suffix,
+  tone,
+}: {
+  label: string;
+  value: number;
+  suffix?: string;
+  tone: "slate" | "emerald" | "violet" | "rose";
+}) {
+  const c = {
+    slate: "bg-slate-50 border-slate-200 text-slate-700",
+    emerald: "bg-emerald-50 border-emerald-200 text-emerald-700",
+    violet: "bg-violet-50 border-violet-200 text-violet-700",
+    rose: "bg-rose-50 border-rose-200 text-rose-700",
+  }[tone];
+  return (
+    <div className={clsx("border rounded-xl p-2.5", c)}>
+      <div className="text-[10px] opacity-80">{label}</div>
+      <div className="text-xl font-bold tabular-nums mt-0.5">
+        {value}
+        <span className="text-[10px] ml-0.5 opacity-70">{suffix}</span>
+      </div>
+    </div>
+  );
+}
+
+function MobileSection({
+  title,
+  count,
+  tone,
+  children,
+}: {
+  title: string;
+  count: number;
+  tone: "emerald" | "violet" | "rose";
+  children: React.ReactNode;
+}) {
+  const badge = {
+    emerald: "bg-emerald-100 text-emerald-700",
+    violet: "bg-violet-100 text-violet-700",
+    rose: "bg-rose-100 text-rose-700",
+  }[tone];
+  return (
+    <div>
+      <div className="px-3 py-1.5 bg-slate-50/60 border-b border-slate-100 flex items-center gap-1.5">
+        <span className="text-[11px] font-semibold text-slate-700">{title}</span>
+        <span className={clsx("text-[10px] px-1.5 py-0.5 rounded font-semibold tabular-nums", badge)}>
+          {count}
+        </span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function MobilePersonRow({
+  name,
+  dept,
+  checkIn,
+  checkOut,
+  status,
+}: {
+  name: string;
+  dept: string;
+  checkIn: string;
+  checkOut: string;
+  status: "working" | "done";
+}) {
+  return (
+    <div className="px-3 py-2 border-b border-slate-50">
+      <div className="flex items-center gap-2">
+        <div
+          className={clsx(
+            "relative w-7 h-7 rounded-full text-white text-[10px] font-semibold flex items-center justify-center shrink-0",
+            status === "working"
+              ? "bg-gradient-to-br from-emerald-400 to-emerald-600"
+              : "bg-gradient-to-br from-violet-400 to-violet-600"
+          )}
+        >
+          {name.slice(0, 1)}
+          {status === "working" && (
+            <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 border border-white" />
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-[12px] font-semibold text-slate-800 truncate">{name}</div>
+          <div className="text-[9.5px] text-slate-500 truncate">{dept}</div>
+        </div>
+        <div className="text-right text-[10.5px] tabular-nums">
+          <div className="text-emerald-700 font-semibold">출 {checkIn}</div>
+          <div className={clsx(status === "done" ? "text-rose-700 font-semibold" : "text-slate-300")}>
+            퇴 {checkOut}
+          </div>
         </div>
       </div>
     </div>

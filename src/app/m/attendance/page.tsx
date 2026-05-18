@@ -44,12 +44,37 @@ export default async function MobileAttendancePage() {
     return v;
   };
 
+  // 관리자에게는 오늘 전체 내부직원 출퇴근 현황 동봉
+  let adminData: any = null;
+  if (me.role === "admin") {
+    const t = new Date();
+    t.setHours(0, 0, 0, 0);
+    const tEnd = new Date(t);
+    tEnd.setDate(tEnd.getDate() + 1);
+
+    const internalUsers = await prisma.user.findMany({
+      where: { status: "active", isInternal: true },
+      select: { id: true, name: true, dept: true, position: true },
+      orderBy: { name: "asc" },
+    });
+    const allTodayAttendance = await prisma.attendance.findMany({
+      where: { date: { gte: t, lt: tEnd }, user: { isInternal: true, status: "active" } },
+      include: { user: { select: { id: true, name: true, dept: true, position: true } } },
+      orderBy: { checkIn: "asc" },
+    });
+    adminData = {
+      allTodayAttendance: serialize(allTodayAttendance),
+      internalUsers,
+    };
+  }
+
   return (
     <MobileAttendanceClient
       me={{ ...myUser, isInternal: myUser.isInternal || me.role === "admin", role: me.role }}
       today={today ? serialize(today) : null}
       recent={serialize(recent)}
       offices={offices}
+      adminData={adminData}
     />
   );
 }
