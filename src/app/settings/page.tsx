@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import { getOfficeLocation } from "@/lib/geo";
+import { getOfficeLocations } from "@/lib/geo";
 import SettingsClient from "@/components/SettingsClient";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +17,6 @@ export default async function SettingsPage() {
     );
   }
 
-  const office = await getOfficeLocation();
-  return <SettingsClient initialOffice={office} />;
+  const offices = await getOfficeLocations();
+  return <SettingsClient initialOffices={offices} />;
 }

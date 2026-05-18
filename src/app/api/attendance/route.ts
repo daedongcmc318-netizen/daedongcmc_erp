@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { getOfficeLocation, haversineMeters } from "@/lib/geo";
+import { checkInRadius, getOfficeLocations } from "@/lib/geo";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     where: { userId_date: { userId: me.id, date: today } },
   });
 
-  // GPS 검증 — 출근/퇴근 시 lat/lng 필수 + 반경 강제
+  // GPS 검증 — 출근/퇴근 시 lat/lng 필수 + 등록된 모든 지사 중 가장 가까운 곳 반경 안에 있어야 통과
   let distance: number | null = null;
   if (action === "check_in" || action === "check_out") {
     if (lat == null || lng == null) {
@@ -49,21 +49,22 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    const office = await getOfficeLocation();
-    if (!office) {
+    const offices = await getOfficeLocations();
+    if (offices.length === 0) {
       return NextResponse.json(
         { error: "사무실 위치가 설정되지 않았습니다. 관리자에게 문의하세요." },
         { status: 500 }
       );
     }
-    distance = haversineMeters(Number(lat), Number(lng), office.lat, office.lng);
-    // 반경 초과 시 차단 — admin도 동일하게 적용. 예외 처리가 필요하면 관리자가 /attendance 페이지에서 수동 편집.
-    if (distance > office.radiusM) {
+    const { ok, nearest, distance: dist } = await checkInRadius(Number(lat), Number(lng));
+    distance = dist;
+    if (!ok) {
       return NextResponse.json(
         {
-          error: `사무실에서 너무 멉니다. 현재 ${Math.round(distance)}m (허용 반경 ${office.radiusM}m, 기준: ${office.name})`,
-          distance,
-          officeRadius: office.radiusM,
+          error: `등록된 사무실 반경 밖입니다. 가장 가까운 지사: ${nearest?.name ?? "(미지정)"} · 거리 ${Math.round(dist ?? 0)}m (허용 반경 ${nearest?.radiusM ?? 0}m)`,
+          distance: dist,
+          nearestName: nearest?.name,
+          officeRadius: nearest?.radiusM,
         },
         { status: 403 }
       );
