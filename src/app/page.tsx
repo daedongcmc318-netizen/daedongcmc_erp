@@ -662,36 +662,48 @@ function ManagerList({
         const inProgressW = g.total > 0 ? (g.inProgress / g.total) * 100 : 0;
         const doneW = g.total > 0 ? (g.done / g.total) * 100 : 0;
         return (
-          <li key={m.id} className="flex items-center gap-3 p-2 -mx-2 rounded-lg hover:bg-slate-50">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-brand-400 to-brand-600 text-white text-xs font-semibold flex items-center justify-center shrink-0">
-              {m.name.slice(0, 1)}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between mb-1">
-                <div className="flex items-baseline gap-1.5 min-w-0">
-                  <span className="text-sm font-medium text-slate-800 truncate">{m.name}</span>
-                  <span className="text-[10px] text-slate-400 shrink-0">{m.position}</span>
+          <li key={m.id}>
+            <Link
+              href={`/managers/${m.id}`}
+              className="flex items-center gap-3 p-2 -mx-2 rounded-lg hover:bg-slate-50 hover:ring-1 hover:ring-brand-100 transition cursor-pointer group"
+              title={`${m.name} 담당자 대시보드 열기`}
+            >
+              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-brand-400 to-brand-600 text-white text-xs font-semibold flex items-center justify-center shrink-0">
+                {m.name.slice(0, 1)}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-baseline gap-1.5 min-w-0">
+                    <span className="text-sm font-medium text-slate-800 truncate group-hover:text-brand-700">
+                      {m.name}
+                    </span>
+                    <span className="text-[10px] text-slate-400 shrink-0">{m.position}</span>
+                  </div>
+                  <span className="text-sm font-semibold tabular-nums text-slate-800 shrink-0">
+                    {g.total}
+                    <span className="text-[10px] text-slate-400 ml-0.5">건</span>
+                  </span>
                 </div>
-                <span className="text-sm font-semibold tabular-nums text-slate-800 shrink-0">
-                  {g.total}
-                  <span className="text-[10px] text-slate-400 ml-0.5">건</span>
-                </span>
+                <div
+                  className="flex h-1.5 rounded-full overflow-hidden bg-slate-100"
+                  style={{ width: `${pct}%`, minWidth: "20px" }}
+                >
+                  <div className="bg-brand-500" style={{ width: `${inProgressW}%` }} />
+                  <div className="bg-emerald-500" style={{ width: `${doneW}%` }} />
+                </div>
+                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-slate-600">
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-sm bg-brand-500" />
+                    진행중 <strong className="text-brand-700 tabular-nums">{g.inProgress}</strong>
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-sm bg-emerald-500" />
+                    완료 <strong className="text-emerald-700 tabular-nums">{g.done}</strong>
+                  </span>
+                </div>
               </div>
-              <div className="flex h-1.5 rounded-full overflow-hidden bg-slate-100" style={{ width: `${pct}%`, minWidth: "20px" }}>
-                <div className="bg-brand-500" style={{ width: `${inProgressW}%` }} />
-                <div className="bg-emerald-500" style={{ width: `${doneW}%` }} />
-              </div>
-              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-slate-600">
-                <span className="inline-flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-sm bg-brand-500" />
-                  진행중 <strong className="text-brand-700 tabular-nums">{g.inProgress}</strong>
-                </span>
-                <span className="inline-flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-sm bg-emerald-500" />
-                  완료 <strong className="text-emerald-700 tabular-nums">{g.done}</strong>
-                </span>
-              </div>
-            </div>
+              <ArrowRight className="w-3 h-3 text-slate-300 group-hover:text-brand-600 group-hover:translate-x-0.5 transition shrink-0" />
+            </Link>
           </li>
         );
       })}
