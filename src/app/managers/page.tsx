@@ -38,9 +38,10 @@ export default async function ManagersPage({
   const mMap = new Map(allCandidates.map((m) => [m.id, m]));
 
   // 추가 정보 (진행중 / 사업영역별)
+  // 진행중 = 완료보고(finalReportYn) 체크되기 전 모든 단계
   const inProgressGroups = await prisma.project.groupBy({
     by: ["managerId"],
-    where: { year, managerId: { not: null }, status: "in_progress" },
+    where: { year, managerId: { not: null }, finalReportYn: false },
     _count: true,
   });
   const inProgressMap = new Map(inProgressGroups.map((g) => [g.managerId!, g._count]));

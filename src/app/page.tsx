@@ -84,6 +84,7 @@ async function getDashboardData() {
     managerGroups,
     dueProjects,
     dueThisMonth,
+    inProgressTotal,
   ] = await Promise.all([
     prisma.project.count({ where: { year } }),
     // 진행현황 파이프라인은 '육성'만 집계 (발굴은 별도 카운트로 앞에 붙임)
@@ -109,9 +110,9 @@ async function getDashboardData() {
       },
       select: { amount: true, issueDate: true, paymentDoneYn: true },
     }),
-    // 담당자별 상태별 카운트 (진행중 vs 완료)
+    // 담당자별 카운트 (진행중 vs 완료) — finalReportYn 체크 여부로 분류
     prisma.project.groupBy({
-      by: ["managerId", "status"],
+      by: ["managerId", "finalReportYn"],
       where: { year, managerId: { not: null } },
       _count: true,
     }),
@@ -129,6 +130,10 @@ async function getDashboardData() {
     // 이번달 마감 예정 = 종료일자가 이번달에 속한 건 (이미 지난 일자 포함, 완료보고 미완료만)
     prisma.project.count({
       where: { year, endDate: { gte: monthStart, lte: monthEnd }, finalReportYn: false },
+    }),
+    // 전체 진행중 = 완료보고(finalReportYn) 체크되기 전 모든 프로젝트
+    prisma.project.count({
+      where: { year, finalReportYn: false },
     }),
   ]);
 
@@ -171,8 +176,7 @@ async function getDashboardData() {
   });
   const managerMap = new Map(managers.map((m) => [m.id, m]));
 
-  // 진행중 = 정산/입금 이전 단계 / 완료 = 정산완료 + 입금완료
-  const DONE_STATUSES = new Set(["settlement_done", "payment_done"]);
+  // 진행중 = 완료보고(finalReportYn) 체크되기 전 모든 단계 / 완료 = finalReportYn 체크됨
   const managerSummary = new Map<
     string,
     { total: number; inProgress: number; done: number; manager: typeof managers[0] }
@@ -184,7 +188,7 @@ async function getDashboardData() {
       managerSummary.set(m.id, { total: 0, inProgress: 0, done: 0, manager: m });
     const s = managerSummary.get(m.id)!;
     s.total += g._count;
-    if (DONE_STATUSES.has(g.status)) s.done += g._count;
+    if (g.finalReportYn) s.done += g._count;
     else s.inProgress += g._count;
   }
 
@@ -221,6 +225,7 @@ async function getDashboardData() {
     monthlyInvoice,
     dueProjects,
     dueThisMonth,
+    inProgressTotal,
     upcomingReports,
     todayMs: today.getTime(),
   };
@@ -265,7 +270,7 @@ export default async function DashboardPage() {
           </div>
           <h1 className="text-2xl font-semibold tracking-tight">대시보드</h1>
           <p className="text-sm text-slate-500 mt-1">
-            {data.year}년 사업 진행 현황 · 프로젝트 {data.projectCount}건 · 진행 {data.statusGroups.filter(s => s.status === "in_progress").reduce((a,b)=>a+b._count,0)}건
+            {data.year}년 사업 진행 현황 · 프로젝트 {data.projectCount}건 · 진행 {data.inProgressTotal}건
           </p>
         </div>
         <Link
