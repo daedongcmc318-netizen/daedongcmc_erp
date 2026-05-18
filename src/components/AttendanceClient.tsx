@@ -30,6 +30,8 @@ type Attendance = {
   status: string;
   checkInIp: string | null;
   checkOutIp: string | null;
+  checkInLat?: number | null;
+  checkInLng?: number | null;
   notes: string | null;
 };
 
@@ -516,8 +518,10 @@ export default function AttendanceClient({
             <span>
               근무 시간: <strong className="text-slate-800">{fmtDuration(today.checkIn, today.checkOut)}</strong>
             </span>
-            {today.checkInIp && (
-              <span className="text-[10px] text-slate-400">IP: {today.checkInIp}</span>
+            {selected && (
+              <span className="text-[10px] text-slate-400">
+                위치: <strong className="text-slate-600">{selected.name}</strong>
+              </span>
             )}
           </div>
         )}
@@ -562,7 +566,7 @@ export default function AttendanceClient({
                 <th className="text-left px-3 py-2 border-b border-r border-slate-200 w-24">출근</th>
                 <th className="text-left px-3 py-2 border-b border-r border-slate-200 w-24">퇴근</th>
                 <th className="text-left px-3 py-2 border-b border-r border-slate-200 w-28">근무시간</th>
-                <th className="text-left px-3 py-2 border-b border-r border-slate-200 w-32">출근 IP</th>
+                <th className="text-left px-3 py-2 border-b border-r border-slate-200 w-28">위치</th>
                 <th className="text-left px-3 py-2 border-b border-r border-slate-200">메모</th>
                 {isAdmin && <th className="text-center px-2 py-2 border-b border-slate-200 w-20">관리</th>}
               </tr>
@@ -588,8 +592,8 @@ export default function AttendanceClient({
                     <td className="px-3 py-1.5 border-b border-r border-slate-100 tabular-nums text-slate-600">
                       {r.checkIn ? fmtDuration(r.checkIn, r.checkOut) : "—"}
                     </td>
-                    <td className="px-3 py-1.5 border-b border-r border-slate-100 text-[10px] text-slate-400">
-                      {r.checkInIp ?? "—"}
+                    <td className="px-3 py-1.5 border-b border-r border-slate-100">
+                      <BranchBadge lat={r.checkInLat ?? null} lng={r.checkInLng ?? null} offices={offices} />
                     </td>
                     <td className="px-3 py-1.5 border-b border-r border-slate-100 text-slate-500 text-[11px]">
                       {r.notes ?? "—"}
@@ -883,6 +887,52 @@ function PersonRow({
 
 function EmptyRow({ text }: { text: string }) {
   return <div className="px-4 py-4 text-center text-[11.5px] text-slate-400">{text}</div>;
+}
+
+/** 출근 좌표를 등록된 지사 중 가장 가까운 곳으로 매핑해 뱃지 표시 */
+function BranchBadge({
+  lat,
+  lng,
+  offices,
+}: {
+  lat: number | null;
+  lng: number | null;
+  offices: Office[];
+}) {
+  if (lat == null || lng == null || offices.length === 0) {
+    return <span className="text-[10.5px] text-slate-300">—</span>;
+  }
+  // 가장 가까운 지사 + 거리 계산
+  let nearest: Office | null = null;
+  let minDist = Infinity;
+  for (const o of offices) {
+    const d = haversineMeters(lat, lng, o.lat, o.lng);
+    if (d < minDist) {
+      minDist = d;
+      nearest = o;
+    }
+  }
+  if (!nearest) return <span className="text-[10.5px] text-slate-300">—</span>;
+  const within = minDist <= nearest.radiusM;
+  // 본사/지사 색상 구분 (primary = brand, 기타 = sky)
+  const tone = within
+    ? nearest.isPrimary
+      ? "bg-brand-50 text-brand-700 ring-brand-200"
+      : "bg-sky-50 text-sky-700 ring-sky-200"
+    : "bg-amber-50 text-amber-700 ring-amber-200";
+  return (
+    <span
+      className={clsx(
+        "inline-flex items-center gap-1 text-[10.5px] px-1.5 py-0.5 rounded ring-1 font-medium",
+        tone
+      )}
+      title={`${nearest.name} · 출근 시각 ${Math.round(minDist)}m`}
+    >
+      {nearest.isPrimary && <Star className="w-2.5 h-2.5 fill-current" />}
+      {nearest.name}
+      {!within && <span className="text-[9px] opacity-70">(반경 밖)</span>}
+    </span>
+  );
 }
 
 function EditModal({
